@@ -8,7 +8,7 @@ const app = express();
 // 🔐 Stripe setup
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// ⚠️ IMPORTANT: webhook needs raw body
+// ⚠️ Webhook needs raw body
 app.use("/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 app.use(cors());
@@ -34,6 +34,8 @@ app.post("/create-checkout-session", async (req, res) => {
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             mode: "payment",
+
+            customer_creation: "always", // 🔥 ensures email is captured
 
             line_items: [
                 {
@@ -78,8 +80,9 @@ app.post("/webhook", async (req, res) => {
         return res.sendStatus(400);
     }
 
-    // 🎯 PAYMENT SUCCESS
     if (event.type === "checkout.session.completed") {
+
+        console.log("🔥 WEBHOOK HIT");
 
         const session = event.data.object;
         const email = session.customer_details?.email;
@@ -93,38 +96,47 @@ app.post("/webhook", async (req, res) => {
                     to: email,
                     subject: "Your Lab Order is Ready",
                     html: `
-                        <h2>Your Lab Order is Ready</h2>
+                        <div style="font-family: Arial, sans-serif; text-align: center; padding: 20px;">
 
-                        <p>Thank you for your order — we’ve received everything on our end.</p>
+                            <img src="https://www.prospineorlando.com/images/logo-5-stars.png" 
+                                 alt="ProSpine Orlando" 
+                                 style="max-width:180px; margin-bottom:20px;" />
 
-                        <p><strong>Next step:</strong> please schedule your lab appointment for your blood collection.</p>
+                            <h2>Your Lab Order is Ready</h2>
 
-                        <p>
-                        <a href="https://appointment.questdiagnostics.com" target="_blank">
-                        Click here to schedule your appointment
-                        </a>
-                        </p>
+                            <p>Thank you for your order — we’ve received everything on our end.</p>
 
-                        <p>
-                        You can choose the most convenient location near you and select a time that works best.
-                        </p>
+                            <p><strong>Next step:</strong> please schedule your lab appointment for your blood collection.</p>
 
-                        <br>
+                            <p>
+                            <a href="https://appointment.questdiagnostics.com" target="_blank"
+                               style="display:inline-block; padding:12px 18px; background:#0a7cff; color:white; text-decoration:none; border-radius:8px;">
+                            Schedule Your Appointment
+                            </a>
+                            </p>
 
-                        <p><strong>Important:</strong></p>
+                            <p>
+                            You can choose the most convenient location near you and select a time that works best.
+                            </p>
 
-                        <p>
-                        ✔ Bring a valid photo ID<br>
-                        ✔ No payment is required at the lab — your testing has already been arranged through our office
-                        </p>
+                            <br>
 
-                        <br>
+                            <p><strong>Important:</strong></p>
 
-                        <p>
-                        If you have any questions or need assistance, feel free to contact our office.
-                        </p>
+                            <p>
+                            ✔ Bring a valid photo ID<br>
+                            ✔ No payment is required at the lab — your testing has already been arranged through our office
+                            </p>
 
-                        <p>— ProSpine Orlando</p>
+                            <br>
+
+                            <p>
+                            If you have any questions or need assistance, feel free to contact our office.
+                            </p>
+
+                            <p>— ProSpine Orlando</p>
+
+                        </div>
                     `
                 });
 
@@ -134,7 +146,7 @@ app.post("/webhook", async (req, res) => {
                 console.error("Email error:", emailError);
             }
         } else {
-            console.log("No email provided by Stripe.");
+            console.log("No email provided.");
         }
     }
 
