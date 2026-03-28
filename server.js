@@ -1,165 +1,162 @@
+require("dotenv").config();
 const express = require("express");
 const Stripe = require("stripe");
 const cors = require("cors");
 const nodemailer = require("nodemailer");
+const { PDFDocument, StandardFonts } = require("pdf-lib");
 
 const app = express();
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-// 🔐 Stripe setup
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-// ⚠️ Webhook needs raw body
+/* IMPORTANT: RAW BODY FOR WEBHOOK */
 app.use("/webhook", express.raw({ type: "application/json" }));
-app.use(express.json());
-app.use(cors());
 
-// 📧 SMTP2GO email setup
-const transporter = nodemailer.createTransport({
-    host: "mail.smtp2go.com",
-    port: 2525,
-    secure: false,
-    auth: {
+app.use(cors());
+app.use(express.json());
+
+/* =========================
+   CREATE CHECKOUT SESSION
+========================= */
+app.post("/create-checkout-session", async (req, res) => {
+  try {
+    const { tests, name, dob, email, phone } = req.body;
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
+      customer_email: email,
+
+      line_items: tests.map(t => ({
+        price_data: {
+          currency: "usd",
+          product_data: { name: t.name },
+          unit_amount: t.price * 100
+        },
+        quantity: 1
+      })),
+
+      metadata: {
+        tests: JSON.stringify(tests),
+        name,
+        dob,
+        phone
+      },
+
+      success_url: "https://www.prospineorlando.com/success.html",
+      cancel_url: "https://www.prospineorlando.com/cancel.html"
+    });
+
+    res.json({ url: session.url });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error creating session");
+  }
+});
+
+/* =========================
+   WEBHOOK
+========================= */
+app.post("/webhook", async (req, res) => {
+
+  const event = req.body;
+
+  if (event.type === "checkout.session.completed") {
+
+    const session = event.data.object;
+    const tests = JSON.parse(session.metadata.tests);
+
+    /* =========================
+       CREATE PDF
+    ========================= */
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    page.drawText("ProSpine Orlando - Lab Order", { x: 50, y: 750, size: 16, font });
+
+    page.drawText(`Name: ${session.metadata.name}`, { x: 50, y: 700 });
+    page.drawText(`DOB: ${session.metadata.dob}`, { x: 50, y: 680 });
+
+    let y = 650;
+
+    tests.forEach(t => {
+      page.drawText(`${t.name} (Code: ${t.code})`, { x: 50, y });
+      y -= 20;
+    });
+
+    const pdfBytes = await pdfDoc.save();
+
+    /* =========================
+       EMAIL SETUP
+    ========================= */
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: 587,
+      auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
-    }
-});
+      }
+    });
 
-// ✅ CREATE CHECKOUT SESSION
-app.post("/create-checkout-session", async (req, res) => {
-    try {
-        const { name, total, tests } = req.body;
+    const testList = tests.map(t => `${t.name} (${t.code})`).join("<br>");
 
-        console.log("Incoming order:", name, total, tests);
+    /* =========================
+       EMAIL TO PATIENT
+    ========================= */
+    await transporter.sendMail({
+      to: session.customer_details.email,
+      subject: "Your Lab Order is Ready",
+      html: `
+      <h2>ProSpine Orlando</h2>
+      <p>Your lab order is ready.</p>
 
-        const session = await stripe.checkout.sessions.create({
-            payment_method_types: ["card"],
-            mode: "payment",
+      <p><b>Name:</b> ${session.metadata.name}</p>
+      <p><b>DOB:</b> ${session.metadata.dob}</p>
 
-            customer_creation: "always", // 🔥 ensures email is captured
+      <p><b>Tests Ordered:</b><br>${testList}</p>
 
-            line_items: [
-                {
-                    price_data: {
-                        currency: "usd",
-                        product_data: {
-                            name: "Lab Order - " + name,
-                            description: tests.join(", ")
-                        },
-                        unit_amount: Math.round(total * 100),
-                    },
-                    quantity: 1,
-                },
-            ],
+      <p>Please bring ID to Quest Diagnostics. No payment needed at the lab.</p>
 
-            success_url: "https://www.prospineorlando.com/success",
-            cancel_url: "https://www.prospineorlando.com/cancel",
-        });
-
-        res.json({ url: session.url });
-
-    } catch (error) {
-        console.error("Checkout error:", error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// ✅ STRIPE WEBHOOK (EMAIL AUTOMATION)
-app.post("/webhook", async (req, res) => {
-    const sig = req.headers["stripe-signature"];
-
-    let event;
-
-    try {
-        event = stripe.webhooks.constructEvent(
-            req.body,
-            sig,
-            process.env.STRIPE_WEBHOOK_SECRET
-        );
-    } catch (err) {
-        console.error("Webhook signature error:", err.message);
-        return res.sendStatus(400);
-    }
-
-    if (event.type === "checkout.session.completed") {
-
-        console.log("🔥 WEBHOOK HIT");
-
-        const session = event.data.object;
-        const email = session.customer_details?.email;
-
-        console.log("Payment completed for:", email);
-
-        if (email) {
-            try {
-                await transporter.sendMail({
-                    from: '"ProSpine Orlando" <contact@prospineorlando.com>',
-                    to: email,
-                    subject: "Your Lab Order is Ready",
-                    html: `
-                        <div style="font-family: Arial, sans-serif; text-align: center; padding: 20px;">
-
-                            <img src="https://www.prospineorlando.com/images/logo-5-stars.png" 
-                                 alt="ProSpine Orlando" 
-                                 style="max-width:180px; margin-bottom:20px;" />
-
-                            <h2>Your Lab Order is Ready</h2>
-
-                            <p>Thank you for your order — we’ve received everything on our end.</p>
-
-                            <p><strong>Next step:</strong> please schedule your lab appointment for your blood collection.</p>
-
-                            <p>
-                            <a href="https://appointment.questdiagnostics.com" target="_blank"
-                               style="display:inline-block; padding:12px 18px; background:#0a7cff; color:white; text-decoration:none; border-radius:8px;">
-                            Schedule Your Appointment
-                            </a>
-                            </p>
-
-                            <p>
-                            You can choose the most convenient location near you and select a time that works best.
-                            </p>
-
-                            <br>
-
-                            <p><strong>Important:</strong></p>
-
-                            <p>
-                            ✔ Bring a valid photo ID<br>
-                            ✔ No payment is required at the lab — your testing has already been arranged through our office
-                            </p>
-
-                            <br>
-
-                            <p>
-                            If you have any questions or need assistance, feel free to contact our office.
-                            </p>
-
-                            <p>— ProSpine Orlando</p>
-
-                        </div>
-                    `
-                });
-
-                console.log("Email sent to:", email);
-
-            } catch (emailError) {
-                console.error("Email error:", emailError);
-            }
-        } else {
-            console.log("No email provided.");
+      <p>
+        <a href="https://www.questdiagnostics.com/locations/search">
+        Find a Quest Location
+        </a>
+      </p>
+      `,
+      attachments: [
+        {
+          filename: "lab-order.pdf",
+          content: pdfBytes
         }
-    }
+      ]
+    });
 
-    res.sendStatus(200);
+    /* =========================
+       EMAIL TO CLINIC
+    ========================= */
+    await transporter.sendMail({
+      to: "contact@prospineorlando.com",
+      subject: "New Lab Order",
+      html: `
+      <h3>New Order Received</h3>
+
+      <p><b>Name:</b> ${session.metadata.name}</p>
+      <p><b>DOB:</b> ${session.metadata.dob}</p>
+      <p><b>Email:</b> ${session.customer_details.email}</p>
+      <p><b>Phone:</b> ${session.metadata.phone}</p>
+
+      <p><b>Tests:</b><br>${testList}</p>
+
+      <p><b>Total Paid:</b> $${session.amount_total / 100}</p>
+      `
+    });
+  }
+
+  res.sendStatus(200);
 });
 
-// ✅ TEST ROUTE
-app.get("/", (req, res) => {
-    res.send("Server is running ✅");
-});
-
-// ✅ START SERVER
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log("Server running on port " + PORT);
-});
+/* =========================
+   START SERVER
+========================= */
+app.listen(3000, () => console.log("Server running on port 3000"));
