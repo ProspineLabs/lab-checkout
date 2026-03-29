@@ -70,8 +70,8 @@ app.post("/create-checkout-session", async (req, res) => {
       mode: "payment",
 
       /* ✅ FIXED URL */
-      success_url: "https://www.prospineorlando.com/success.htm",
-      cancel_url: "https://www.prospineorlando.com/cancel.htm",
+      success_url: "https://www.prospineorlando.com/success",
+      cancel_url: "https://www.prospineorlando.com/cancel",
 
       metadata: {
         name,
