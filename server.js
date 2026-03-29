@@ -80,7 +80,6 @@ app.post("/webhook", async (req, res) => {
     return res.sendStatus(400);
   }
 
-  /* ===================================== */
   if (event.type === "checkout.session.completed") {
 
     console.log("🔥 PAYMENT SUCCESS TRIGGERED");
@@ -113,25 +112,18 @@ app.post("/webhook", async (req, res) => {
     const pdfBytes = await pdfDoc.save();
 
     /* =====================================
-       EMAIL CONFIG (FIXED)
+       EMAIL CONFIG (SMTP2GO)
     ===================================== */
 
-    console.log("📨 Attempting to send email...");
-    console.log("SMTP HOST:", process.env.SMTP_HOST);
-    console.log("SMTP USER:", process.env.SMTP_USER);
-    console.log("SMTP PASS exists:", !!process.env.SMTP_PASS);
+    console.log("📨 Attempting to send email via SMTP2GO...");
 
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587,
+      host: process.env.SMTP_HOST, // mail.smtp2go.com
+      port: 2525, // IMPORTANT for Render
       secure: false,
-      connectionTimeout: 10000, // prevent hanging
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
       }
     });
 
@@ -141,6 +133,7 @@ app.post("/webhook", async (req, res) => {
 
       /* EMAIL TO PATIENT */
       await transporter.sendMail({
+        from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
         to: session.customer_details.email,
         subject: "Your Lab Order is Ready",
         html: `
@@ -173,6 +166,7 @@ app.post("/webhook", async (req, res) => {
 
       /* EMAIL TO CLINIC */
       await transporter.sendMail({
+        from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
         to: process.env.SMTP_USER,
         subject: "New Lab Order",
         html: `
@@ -194,8 +188,6 @@ app.post("/webhook", async (req, res) => {
     } catch (err) {
       console.error("❌ EMAIL ERROR FULL:");
       console.error(err);
-      console.error("MESSAGE:", err.message);
-      console.error("CODE:", err.code);
     }
   }
 
@@ -207,13 +199,12 @@ app.post("/webhook", async (req, res) => {
 ===================================== */
 app.get("/test-email", async (req, res) => {
 
-  console.log("🧪 Testing email system...");
+  console.log("🧪 Testing SMTP2GO email...");
 
   const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
+    host: process.env.SMTP_HOST,
+    port: 2525,
     secure: false,
-    connectionTimeout: 10000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
@@ -222,13 +213,14 @@ app.get("/test-email", async (req, res) => {
 
   try {
     await transporter.sendMail({
+      from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
       to: process.env.SMTP_USER,
       subject: "Test Email",
-      text: "Email system is working"
+      text: "SMTP2GO is working"
     });
 
     console.log("✅ Test email sent");
-    res.send("✅ Test email sent");
+    res.send("✅ Email sent");
 
   } catch (err) {
     console.error("❌ TEST EMAIL ERROR:", err);
