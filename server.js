@@ -69,8 +69,8 @@ app.post("/create-checkout-session", async (req, res) => {
       line_items,
       mode: "payment",
 
-      success_url: "https://www.prospineorlando.com/success.html",
-      cancel_url: "https://www.prospineorlando.com/cancel.html",
+      success_url: "https://www.prospineorlando.com/success",
+      cancel_url: "https://www.prospineorlando.com/cancel",
 
       metadata: {
         name,
