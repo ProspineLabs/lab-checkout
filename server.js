@@ -1,68 +1,78 @@
-require("dotenv").config();
-
 const express = require("express");
 const Stripe = require("stripe");
-const cors = require("cors");
 const nodemailer = require("nodemailer");
-const { PDFDocument, StandardFonts } = require("pdf-lib");
+const bodyParser = require("body-parser");
 
 const app = express();
+
+// 🔐 ENV VARIABLES
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-/* RAW BODY FOR WEBHOOK */
-app.use("/webhook", express.raw({ type: "application/json" }));
-
-app.use(cors());
+// IMPORTANT: raw body for webhook
+app.use("/webhook", bodyParser.raw({ type: "application/json" }));
 app.use(express.json());
 
-/* =====================================
-   CREATE CHECKOUT SESSION
-===================================== */
+// ==============================
+// 📧 EMAIL SETUP (SMTP2GO)
+// ==============================
+const transporter = nodemailer.createTransport({
+  host: "mail.smtp2go.com",
+  port: 2525,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+// ==============================
+// 🧾 CREATE CHECKOUT SESSION
+// ==============================
 app.post("/create-checkout-session", async (req, res) => {
   try {
-    const { tests, name, dob, email, phone } = req.body;
-
     console.log("🧾 Creating checkout session...");
-    console.log("Patient:", name);
+    console.log("Patient:", req.body.name);
+
+    const { name, dob, email, phone, tests } = req.body;
+
+    const line_items = tests.map((t) => ({
+      price_data: {
+        currency: "usd",
+        product_data: {
+          name: t.name,
+        },
+        unit_amount: t.price * 100,
+      },
+      quantity: 1,
+    }));
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
+      line_items,
       mode: "payment",
-      customer_email: email,
 
-      line_items: tests.map(t => ({
-        price_data: {
-          currency: "usd",
-          product_data: { name: t.name },
-          unit_amount: t.price * 100
-        },
-        quantity: 1
-      })),
+      success_url: "https://www.prospineorlando.com/success.html",
+      cancel_url: "https://www.prospineorlando.com/cancel.html",
 
       metadata: {
-        tests: JSON.stringify(tests),
         name,
         dob,
-        phone
+        email,
+        phone,
+        tests: JSON.stringify(tests),
       },
-
-      success_url: "https://www.prospineorlando.com/success",
-      cancel_url: "https://www.prospineorlando.com/cancel"
     });
 
     res.json({ url: session.url });
 
   } catch (err) {
-    console.error("❌ Checkout error:", err);
+    console.error("❌ Stripe session error:", err.message);
     res.status(500).send("Error creating checkout session");
   }
 });
 
-/* =====================================
-   STRIPE WEBHOOK
-===================================== */
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
+// ==============================
+// 🔔 WEBHOOK
+// ==============================
 app.post("/webhook", async (req, res) => {
 
   const sig = req.headers["stripe-signature"];
@@ -70,10 +80,16 @@ app.post("/webhook", async (req, res) => {
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+
     console.log("✅ Webhook verified:", event.type);
+
   } catch (err) {
-    console.error("❌ Webhook signature error:", err.message);
+    console.log("❌ Webhook signature failed:", err.message);
     return res.sendStatus(400);
   }
 
@@ -82,143 +98,103 @@ app.post("/webhook", async (req, res) => {
     console.log("🔥 PAYMENT SUCCESS TRIGGERED");
 
     const session = event.data.object;
+
+    const name = session.metadata.name;
+    const dob = session.metadata.dob;
+    const email = session.metadata.email;
+    const phone = session.metadata.phone;
     const tests = JSON.parse(session.metadata.tests);
 
-    const testList = tests.map(t => `• ${t.name} (${t.code})`).join("<br>");
+    console.log("Patient:", name);
+    console.log("Tests:", tests);
 
-    /* =====================================
-       CREATE PDF
-    ===================================== */
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const testListHTML = tests.map(t => `
+      <li>${t.name} (${t.code}) - $${t.price}</li>
+    `).join("");
 
-    page.drawText("ProSpine Orlando - Lab Order", { x: 50, y: 750, size: 16, font });
-    page.drawText(`Name: ${session.metadata.name}`, { x: 50, y: 700 });
-    page.drawText(`DOB: ${session.metadata.dob}`, { x: 50, y: 680 });
+    const total = tests.reduce((sum, t) => sum + t.price, 0);
 
-    let y = 650;
-    tests.forEach(t => {
-      page.drawText(`${t.name} (${t.code})`, { x: 50, y });
-      y -= 20;
-    });
+    // ==============================
+    // 📧 EMAIL CONTENT
+    // ==============================
+    const emailHTML = `
+      <div style="font-family:Arial; max-width:600px; margin:auto;">
 
-    const pdfBytes = await pdfDoc.save();
+        <h2 style="text-align:center;">ProSpine Orlando</h2>
 
-    /* =====================================
-       SMTP2GO CONFIG
-    ===================================== */
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: 2525,
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
+        <p>Thank you for your order.</p>
+
+        <p><strong>Patient:</strong> ${name}<br>
+        <strong>DOB:</strong> ${dob}</p>
+
+        <h3>Selected Tests:</h3>
+        <ul>${testListHTML}</ul>
+
+        <h3>Total Paid: $${total}</h3>
+
+        <hr>
+
+        <h3 style="text-align:center;">Next Step</h3>
+
+        <p style="text-align:center;">
+        Schedule your lab appointment below:
+        </p>
+
+        <!-- ✅ UPDATED QUEST LINK -->
+        <div style="text-align:center; margin-top:15px;">
+          <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
+            
+            <img src="https://www.prospineorlando.com/exams/quest.png" 
+            style="width:140px; display:block; margin:auto; margin-bottom:10px;" />
+
+            <span style="display:inline-block; padding:12px 20px; background:#2c7be5; color:#fff; border-radius:6px; font-weight:bold;">
+              Schedule Your Appointment
+            </span>
+          </a>
+        </div>
+
+        <p style="margin-top:20px;">
+        ✔ Bring a valid ID<br>
+        ✔ No payment needed at the lab<br>
+        ✔ Follow any fasting instructions if applicable
+        </p>
+
+      </div>
+    `;
 
     try {
 
-      /* =====================================
-         EMAIL TO PATIENT (UPGRADED)
-      ===================================== */
+      console.log("📨 Sending email...");
+
+      // Patient email
       await transporter.sendMail({
-        from: "ProSpine Orlando <contact@prospineorlando.com>",
-        to: session.customer_details.email,
-        subject: "Your Lab Order is Ready",
-        html: `
-        <div style="font-family:Arial; max-width:600px; margin:auto;">
-
-          <div style="text-align:center; padding:20px;">
-            <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="height:80px;">
-          </div>
-
-          <h2 style="color:#2c7be5;">Your Lab Order is Ready</h2>
-
-          <p>Hello ${session.metadata.name},</p>
-
-          <p>Your lab order has been successfully processed.</p>
-
-          <div style="background:#f5f7fb; padding:15px; border-radius:10px;">
-            <b>Patient:</b> ${session.metadata.name}<br>
-            <b>Date of Birth:</b> ${session.metadata.dob}
-          </div>
-
-          <h3 style="margin-top:20px;">Tests Ordered</h3>
-
-          <div style="line-height:1.6;">
-            ${testList}
-          </div>
-
-          <div style="margin:25px 0; text-align:center;">
-            <a href="https://www.questdiagnostics.com/locations/search"
-               style="display:inline-block; background:#2c7be5; color:white; padding:12px 20px; border-radius:8px; text-decoration:none;">
-               
-               <img src="https://www.prospineorlando.com/exams/quest.png" 
-                    style="height:18px; vertical-align:middle; margin-right:8px;">
-               
-               Schedule Your Appointment
-            </a>
-          </div>
-
-          <p><b>Important:</b></p>
-          <ul>
-            <li>Bring a valid ID</li>
-            <li>No payment required at the lab</li>
-          </ul>
-
-          <p style="margin-top:20px;">
-          Thank you,<br>
-          <b>ProSpine Orlando</b>
-          </p>
-
-        </div>
-        `,
-        attachments: [
-          {
-            filename: "lab-order.pdf",
-            content: pdfBytes
-          }
-        ]
+        from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
+        to: email,
+        subject: "Your Lab Order - ProSpine Orlando",
+        html: emailHTML,
       });
 
-      console.log("📧 Patient email sent");
-
-      /* =====================================
-         EMAIL TO CLINIC
-      ===================================== */
+      // Clinic email
       await transporter.sendMail({
-        from: "ProSpine Orlando <contact@prospineorlando.com>",
-        to: "contact@prospineorlando.com",
+        from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
+        to: process.env.SMTP_USER,
         subject: "New Lab Order",
-        html: `
-        <h3>New Order Received</h3>
-
-        <p><b>Name:</b> ${session.metadata.name}</p>
-        <p><b>DOB:</b> ${session.metadata.dob}</p>
-        <p><b>Email:</b> ${session.customer_details.email}</p>
-        <p><b>Phone:</b> ${session.metadata.phone}</p>
-
-        <p><b>Tests:</b><br>${testList}</p>
-
-        <p><b>Total Paid:</b> $${session.amount_total / 100}</p>
-        `
+        html: emailHTML,
       });
 
-      console.log("📧 Clinic email sent");
+      console.log("✅ Email sent successfully");
 
     } catch (err) {
-      console.error("❌ EMAIL ERROR:", err);
+      console.error("❌ EMAIL ERROR:", err.message);
     }
   }
 
   res.sendStatus(200);
 });
 
-/* =====================================
-   START SERVER
-===================================== */
+// ==============================
+// 🚀 START SERVER
+// ==============================
 app.listen(3000, () => {
   console.log("🚀 Server running on port 3000");
 });
