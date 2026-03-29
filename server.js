@@ -12,7 +12,7 @@ const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ==============================
-   🔴 WEBHOOK (MUST BE FIRST)
+   🔴 WEBHOOK FIRST
 ============================== */
 app.post("/webhook",
   bodyParser.raw({ type: "application/json" }),
@@ -47,9 +47,6 @@ app.post("/webhook",
       const phone = session.metadata.phone;
       const tests = JSON.parse(session.metadata.tests);
 
-      console.log("Patient:", name);
-      console.log("Tests:", tests);
-
       const testListHTML = tests.map(t => `
         <li>${t.name} (${t.code}) - $${t.price}</li>
       `).join("");
@@ -72,26 +69,15 @@ app.post("/webhook",
 
           <hr>
 
-          <h3 style="text-align:center;">Next Step</h3>
-
           <div style="text-align:center; margin-top:15px;">
-            <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
-              
+            <a href="https://appointment.questdiagnostics.com/as-home">
               <img src="https://www.prospineorlando.com/exams/quest.png" 
               style="width:140px; display:block; margin:auto; margin-bottom:10px;" />
-
-              <span style="display:inline-block; padding:12px 20px; background:#2c7be5; color:#fff; border-radius:6px; font-weight:bold;">
+              <span style="display:inline-block; padding:12px 20px; background:#2c7be5; color:#fff; border-radius:6px;">
                 Schedule Your Appointment
               </span>
             </a>
           </div>
-
-          <p style="margin-top:20px;">
-          ✔ Bring a valid ID<br>
-          ✔ No payment needed at the lab<br>
-          ✔ Follow any fasting instructions if applicable
-          </p>
-
         </div>
       `;
 
@@ -99,14 +85,14 @@ app.post("/webhook",
         console.log("📨 Sending email...");
 
         await transporter.sendMail({
-          from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
+          from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`, // ✅ FIXED
           to: email,
-          subject: "Your Lab Order - ProSpine Orlando",
+          subject: "Your Lab Order",
           html: emailHTML,
         });
 
         await transporter.sendMail({
-          from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
+          from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`, // ✅ FIXED
           to: process.env.SMTP_USER,
           subject: "New Lab Order",
           html: emailHTML,
@@ -128,15 +114,12 @@ app.post("/webhook",
 ============================== */
 app.use(express.json());
 
-/* ==============================
-   CORS (ONLY FOR CHECKOUT)
-============================== */
 app.use("/create-checkout-session", cors({
   origin: "https://www.prospineorlando.com"
 }));
 
 /* ==============================
-   EMAIL SETUP (SMTP2GO)
+   EMAIL (SMTP2GO)
 ============================== */
 const transporter = nodemailer.createTransport({
   host: "mail.smtp2go.com",
@@ -148,21 +131,11 @@ const transporter = nodemailer.createTransport({
 });
 
 /* ==============================
-   HEALTH CHECK
-============================== */
-app.get("/", (req, res) => {
-  res.send("Server running");
-});
-
-/* ==============================
-   CREATE CHECKOUT SESSION
+   CHECKOUT SESSION
 ============================== */
 app.post("/create-checkout-session", async (req, res) => {
 
   try {
-    console.log("🧾 Creating checkout session...");
-    console.log("Patient:", req.body.name);
-
     const { name, dob, email, phone, tests } = req.body;
 
     const line_items = tests.map((t) => ({
@@ -179,7 +152,6 @@ app.post("/create-checkout-session", async (req, res) => {
       line_items,
       mode: "payment",
 
-      /* ✅ CORRECT URL */
       success_url: "https://www.prospineorlando.com/success/index.html",
       cancel_url: "https://www.prospineorlando.com/cancel/index.html",
 
@@ -195,8 +167,8 @@ app.post("/create-checkout-session", async (req, res) => {
     res.json({ url: session.url });
 
   } catch (err) {
-    console.error("❌ Stripe error:", err);
-    res.status(500).send("Error creating session");
+    console.error(err);
+    res.status(500).send("Error");
   }
 });
 
