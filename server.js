@@ -10,7 +10,7 @@ const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* =====================================
-   IMPORTANT: RAW BODY FOR STRIPE WEBHOOK
+   RAW BODY FOR STRIPE WEBHOOK
 ===================================== */
 app.use("/webhook", express.raw({ type: "application/json" }));
 
@@ -62,7 +62,7 @@ app.post("/create-checkout-session", async (req, res) => {
 });
 
 /* =====================================
-   STRIPE WEBHOOK (MAIN LOGIC)
+   STRIPE WEBHOOK
 ===================================== */
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -113,8 +113,14 @@ app.post("/webhook", async (req, res) => {
     const pdfBytes = await pdfDoc.save();
 
     /* =====================================
-       EMAIL TRANSPORTER (GMAIL)
+       EMAIL DEBUG START
     ===================================== */
+
+    console.log("📨 Attempting to send email...");
+    console.log("SMTP HOST:", process.env.SMTP_HOST);
+    console.log("SMTP USER:", process.env.SMTP_USER);
+    console.log("SMTP PASS exists:", !!process.env.SMTP_PASS);
+
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -127,9 +133,7 @@ app.post("/webhook", async (req, res) => {
 
     try {
 
-      /* =========================
-         EMAIL TO PATIENT
-      ========================= */
+      /* EMAIL TO PATIENT */
       await transporter.sendMail({
         to: session.customer_details.email,
         subject: "Your Lab Order is Ready",
@@ -143,13 +147,7 @@ app.post("/webhook", async (req, res) => {
 
         <p><b>Tests Ordered:</b><br>${testList}</p>
 
-        <p>Please bring a valid ID to Quest Diagnostics. No payment needed at the lab.</p>
-
-        <p>
-          <a href="https://www.questdiagnostics.com/locations/search">
-          Find a Quest Location
-          </a>
-        </p>
+        <p>Please bring ID to Quest Diagnostics.</p>
         `,
         attachments: [
           {
@@ -161,9 +159,7 @@ app.post("/webhook", async (req, res) => {
 
       console.log("📧 Patient email sent");
 
-      /* =========================
-         EMAIL TO CLINIC
-      ========================= */
+      /* EMAIL TO CLINIC */
       await transporter.sendMail({
         to: process.env.SMTP_USER,
         subject: "New Lab Order",
@@ -184,7 +180,10 @@ app.post("/webhook", async (req, res) => {
       console.log("📧 Clinic email sent");
 
     } catch (err) {
-      console.error("❌ EMAIL ERROR:", err);
+      console.error("❌ EMAIL ERROR FULL:");
+      console.error(err);
+      console.error("MESSAGE:", err.message);
+      console.error("CODE:", err.code);
     }
   }
 
@@ -192,9 +191,11 @@ app.post("/webhook", async (req, res) => {
 });
 
 /* =====================================
-   TEST EMAIL ROUTE (OPTIONAL DEBUG)
+   TEST EMAIL ROUTE
 ===================================== */
 app.get("/test-email", async (req, res) => {
+
+  console.log("🧪 Testing email system...");
 
   const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -211,10 +212,11 @@ app.get("/test-email", async (req, res) => {
       text: "Email system is working"
     });
 
+    console.log("✅ Test email sent");
     res.send("✅ Test email sent");
 
   } catch (err) {
-    console.error(err);
+    console.error("❌ TEST EMAIL ERROR:", err);
     res.send("❌ Email failed");
   }
 });
