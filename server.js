@@ -7,29 +7,24 @@ const cors = require("cors");
 const app = express();
 
 /* ==============================
-   ✅ CORS FIX (VERY IMPORTANT)
-============================== */
-app.use(cors({
-  origin: "https://www.prospineorlando.com"
-}));
-
-/* ==============================
    STRIPE
 ============================== */
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ==============================
-   BODY PARSING
+   BODY PARSING (ORDER MATTERS)
 ============================== */
 app.use("/webhook", bodyParser.raw({ type: "application/json" }));
 app.use(express.json());
 
 /* ==============================
-   HEALTH CHECK (OPTIONAL)
+   CORS (ONLY FOR FRONTEND ROUTE)
 ============================== */
-app.get("/", (req, res) => {
-  res.send("Server is running");
-});
+const corsOptions = {
+  origin: "https://www.prospineorlando.com",
+};
+
+app.use("/create-checkout-session", cors(corsOptions));
 
 /* ==============================
    EMAIL (SMTP2GO)
@@ -41,6 +36,13 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+});
+
+/* ==============================
+   HEALTH CHECK
+============================== */
+app.get("/", (req, res) => {
+  res.send("Server is running");
 });
 
 /* ==============================
@@ -56,9 +58,7 @@ app.post("/create-checkout-session", async (req, res) => {
     const line_items = tests.map((t) => ({
       price_data: {
         currency: "usd",
-        product_data: {
-          name: t.name,
-        },
+        product_data: { name: t.name },
         unit_amount: t.price * 100,
       },
       quantity: 1,
@@ -69,8 +69,9 @@ app.post("/create-checkout-session", async (req, res) => {
       line_items,
       mode: "payment",
 
-      success_url: "https://www.prospineorlando.com/success",
-      cancel_url: "https://www.prospineorlando.com/cancel",
+      /* ✅ FIXED URL */
+      success_url: "https://www.prospineorlando.com/success.htm",
+      cancel_url: "https://www.prospineorlando.com/cancel.htm",
 
       metadata: {
         name,
@@ -90,7 +91,7 @@ app.post("/create-checkout-session", async (req, res) => {
 });
 
 /* ==============================
-   WEBHOOK
+   WEBHOOK (NO CORS HERE)
 ============================== */
 app.post("/webhook", async (req, res) => {
 
@@ -158,7 +159,6 @@ app.post("/webhook", async (req, res) => {
         Schedule your lab appointment below:
         </p>
 
-        <!-- ✅ UPDATED QUEST LINK -->
         <div style="text-align:center; margin-top:15px;">
           <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
             
