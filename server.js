@@ -9,12 +9,9 @@ const { PDFDocument, StandardFonts } = require("pdf-lib");
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-/* =====================================
-   RAW BODY FOR STRIPE WEBHOOK
-===================================== */
+/* RAW BODY FOR WEBHOOK */
 app.use("/webhook", express.raw({ type: "application/json" }));
 
-/* NORMAL MIDDLEWARE */
 app.use(cors());
 app.use(express.json());
 
@@ -87,8 +84,7 @@ app.post("/webhook", async (req, res) => {
     const session = event.data.object;
     const tests = JSON.parse(session.metadata.tests);
 
-    console.log("Patient:", session.metadata.name);
-    console.log("Tests:", tests);
+    const testList = tests.map(t => `• ${t.name} (${t.code})`).join("<br>");
 
     /* =====================================
        CREATE PDF
@@ -98,14 +94,12 @@ app.post("/webhook", async (req, res) => {
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
     page.drawText("ProSpine Orlando - Lab Order", { x: 50, y: 750, size: 16, font });
-
     page.drawText(`Name: ${session.metadata.name}`, { x: 50, y: 700 });
     page.drawText(`DOB: ${session.metadata.dob}`, { x: 50, y: 680 });
 
     let y = 650;
-
     tests.forEach(t => {
-      page.drawText(`${t.name} (Code: ${t.code})`, { x: 50, y });
+      page.drawText(`${t.name} (${t.code})`, { x: 50, y });
       y -= 20;
     });
 
@@ -114,45 +108,72 @@ app.post("/webhook", async (req, res) => {
     /* =====================================
        SMTP2GO CONFIG
     ===================================== */
-
-    console.log("📨 Attempting to send email via SMTP2GO...");
-
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST, // mail.smtp2go.com
+      host: process.env.SMTP_HOST,
       port: 2525,
       secure: false,
       auth: {
-        user: process.env.SMTP_USER, // Prospine
+        user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
       }
     });
 
-    const testList = tests.map(t => `${t.name} (${t.code})`).join("<br>");
-
     try {
 
-      /* EMAIL TO PATIENT */
+      /* =====================================
+         EMAIL TO PATIENT (UPGRADED)
+      ===================================== */
       await transporter.sendMail({
         from: "ProSpine Orlando <contact@prospineorlando.com>",
         to: session.customer_details.email,
         subject: "Your Lab Order is Ready",
         html: `
-        <h2>ProSpine Orlando</h2>
+        <div style="font-family:Arial; max-width:600px; margin:auto;">
 
-        <p>Your lab order is ready.</p>
+          <div style="text-align:center; padding:20px;">
+            <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="height:80px;">
+          </div>
 
-        <p><b>Name:</b> ${session.metadata.name}</p>
-        <p><b>DOB:</b> ${session.metadata.dob}</p>
+          <h2 style="color:#2c7be5;">Your Lab Order is Ready</h2>
 
-        <p><b>Tests Ordered:</b><br>${testList}</p>
+          <p>Hello ${session.metadata.name},</p>
 
-        <p>Please bring a valid ID to Quest Diagnostics. No payment needed at the lab.</p>
+          <p>Your lab order has been successfully processed.</p>
 
-        <p>
-          <a href="https://www.questdiagnostics.com/locations/search">
-          Find a Quest Location
-          </a>
-        </p>
+          <div style="background:#f5f7fb; padding:15px; border-radius:10px;">
+            <b>Patient:</b> ${session.metadata.name}<br>
+            <b>Date of Birth:</b> ${session.metadata.dob}
+          </div>
+
+          <h3 style="margin-top:20px;">Tests Ordered</h3>
+
+          <div style="line-height:1.6;">
+            ${testList}
+          </div>
+
+          <div style="margin:25px 0; text-align:center;">
+            <a href="https://www.questdiagnostics.com/locations/search"
+               style="display:inline-block; background:#2c7be5; color:white; padding:12px 20px; border-radius:8px; text-decoration:none;">
+               
+               <img src="https://www.prospineorlando.com/exams/quest.png" 
+                    style="height:18px; vertical-align:middle; margin-right:8px;">
+               
+               Schedule Your Appointment
+            </a>
+          </div>
+
+          <p><b>Important:</b></p>
+          <ul>
+            <li>Bring a valid ID</li>
+            <li>No payment required at the lab</li>
+          </ul>
+
+          <p style="margin-top:20px;">
+          Thank you,<br>
+          <b>ProSpine Orlando</b>
+          </p>
+
+        </div>
         `,
         attachments: [
           {
@@ -164,7 +185,9 @@ app.post("/webhook", async (req, res) => {
 
       console.log("📧 Patient email sent");
 
-      /* EMAIL TO CLINIC */
+      /* =====================================
+         EMAIL TO CLINIC
+      ===================================== */
       await transporter.sendMail({
         from: "ProSpine Orlando <contact@prospineorlando.com>",
         to: "contact@prospineorlando.com",
@@ -186,46 +209,11 @@ app.post("/webhook", async (req, res) => {
       console.log("📧 Clinic email sent");
 
     } catch (err) {
-      console.error("❌ EMAIL ERROR FULL:");
-      console.error(err);
+      console.error("❌ EMAIL ERROR:", err);
     }
   }
 
   res.sendStatus(200);
-});
-
-/* =====================================
-   TEST EMAIL ROUTE
-===================================== */
-app.get("/test-email", async (req, res) => {
-
-  console.log("🧪 Testing SMTP2GO email...");
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: 2525,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
-
-  try {
-    await transporter.sendMail({
-      from: "ProSpine Orlando <contact@prospineorlando.com>",
-      to: "contact@prospineorlando.com",
-      subject: "Test Email",
-      text: "SMTP2GO is working"
-    });
-
-    console.log("✅ Test email sent");
-    res.send("✅ Email sent");
-
-  } catch (err) {
-    console.error("❌ TEST EMAIL ERROR:", err);
-    res.send("❌ Email failed");
-  }
 });
 
 /* =====================================
