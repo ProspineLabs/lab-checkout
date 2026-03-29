@@ -1,4 +1,5 @@
 require("dotenv").config();
+
 const express = require("express");
 const Stripe = require("stripe");
 const cors = require("cors");
@@ -8,18 +9,24 @@ const { PDFDocument, StandardFonts } = require("pdf-lib");
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-/* IMPORTANT: RAW BODY FOR WEBHOOK */
+/* =====================================
+   IMPORTANT: RAW BODY FOR STRIPE WEBHOOK
+===================================== */
 app.use("/webhook", express.raw({ type: "application/json" }));
 
+/* NORMAL MIDDLEWARE */
 app.use(cors());
 app.use(express.json());
 
-/* =========================
+/* =====================================
    CREATE CHECKOUT SESSION
-========================= */
+===================================== */
 app.post("/create-checkout-session", async (req, res) => {
   try {
     const { tests, name, dob, email, phone } = req.body;
+
+    console.log("🧾 Creating checkout session...");
+    console.log("Patient:", name);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -49,26 +56,44 @@ app.post("/create-checkout-session", async (req, res) => {
     res.json({ url: session.url });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Error creating session");
+    console.error("❌ Checkout error:", err);
+    res.status(500).send("Error creating checkout session");
   }
 });
 
-/* =========================
-   WEBHOOK
-========================= */
+/* =====================================
+   STRIPE WEBHOOK (MAIN LOGIC)
+===================================== */
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
 app.post("/webhook", async (req, res) => {
 
-  const event = req.body;
+  const sig = req.headers["stripe-signature"];
 
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    console.log("✅ Webhook verified:", event.type);
+  } catch (err) {
+    console.error("❌ Webhook signature error:", err.message);
+    return res.sendStatus(400);
+  }
+
+  /* ===================================== */
   if (event.type === "checkout.session.completed") {
+
+    console.log("🔥 PAYMENT SUCCESS TRIGGERED");
 
     const session = event.data.object;
     const tests = JSON.parse(session.metadata.tests);
 
-    /* =========================
+    console.log("Patient:", session.metadata.name);
+    console.log("Tests:", tests);
+
+    /* =====================================
        CREATE PDF
-    ========================= */
+    ===================================== */
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -87,12 +112,11 @@ app.post("/webhook", async (req, res) => {
 
     const pdfBytes = await pdfDoc.save();
 
-    /* =========================
-       EMAIL SETUP
-    ========================= */
+    /* =====================================
+       EMAIL TRANSPORTER (GMAIL)
+    ===================================== */
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: 587,
+      service: "gmail",
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
@@ -101,62 +125,103 @@ app.post("/webhook", async (req, res) => {
 
     const testList = tests.map(t => `${t.name} (${t.code})`).join("<br>");
 
-    /* =========================
-       EMAIL TO PATIENT
-    ========================= */
-    await transporter.sendMail({
-      to: session.customer_details.email,
-      subject: "Your Lab Order is Ready",
-      html: `
-      <h2>ProSpine Orlando</h2>
-      <p>Your lab order is ready.</p>
+    try {
 
-      <p><b>Name:</b> ${session.metadata.name}</p>
-      <p><b>DOB:</b> ${session.metadata.dob}</p>
+      /* =========================
+         EMAIL TO PATIENT
+      ========================= */
+      await transporter.sendMail({
+        to: session.customer_details.email,
+        subject: "Your Lab Order is Ready",
+        html: `
+        <h2>ProSpine Orlando</h2>
 
-      <p><b>Tests Ordered:</b><br>${testList}</p>
+        <p>Your lab order is ready.</p>
 
-      <p>Please bring ID to Quest Diagnostics. No payment needed at the lab.</p>
+        <p><b>Name:</b> ${session.metadata.name}</p>
+        <p><b>DOB:</b> ${session.metadata.dob}</p>
 
-      <p>
-        <a href="https://www.questdiagnostics.com/locations/search">
-        Find a Quest Location
-        </a>
-      </p>
-      `,
-      attachments: [
-        {
-          filename: "lab-order.pdf",
-          content: pdfBytes
-        }
-      ]
-    });
+        <p><b>Tests Ordered:</b><br>${testList}</p>
 
-    /* =========================
-       EMAIL TO CLINIC
-    ========================= */
-    await transporter.sendMail({
-      to: "contact@prospineorlando.com",
-      subject: "New Lab Order",
-      html: `
-      <h3>New Order Received</h3>
+        <p>Please bring a valid ID to Quest Diagnostics. No payment needed at the lab.</p>
 
-      <p><b>Name:</b> ${session.metadata.name}</p>
-      <p><b>DOB:</b> ${session.metadata.dob}</p>
-      <p><b>Email:</b> ${session.customer_details.email}</p>
-      <p><b>Phone:</b> ${session.metadata.phone}</p>
+        <p>
+          <a href="https://www.questdiagnostics.com/locations/search">
+          Find a Quest Location
+          </a>
+        </p>
+        `,
+        attachments: [
+          {
+            filename: "lab-order.pdf",
+            content: pdfBytes
+          }
+        ]
+      });
 
-      <p><b>Tests:</b><br>${testList}</p>
+      console.log("📧 Patient email sent");
 
-      <p><b>Total Paid:</b> $${session.amount_total / 100}</p>
-      `
-    });
+      /* =========================
+         EMAIL TO CLINIC
+      ========================= */
+      await transporter.sendMail({
+        to: process.env.SMTP_USER,
+        subject: "New Lab Order",
+        html: `
+        <h3>New Order Received</h3>
+
+        <p><b>Name:</b> ${session.metadata.name}</p>
+        <p><b>DOB:</b> ${session.metadata.dob}</p>
+        <p><b>Email:</b> ${session.customer_details.email}</p>
+        <p><b>Phone:</b> ${session.metadata.phone}</p>
+
+        <p><b>Tests:</b><br>${testList}</p>
+
+        <p><b>Total Paid:</b> $${session.amount_total / 100}</p>
+        `
+      });
+
+      console.log("📧 Clinic email sent");
+
+    } catch (err) {
+      console.error("❌ EMAIL ERROR:", err);
+    }
   }
 
   res.sendStatus(200);
 });
 
-/* =========================
+/* =====================================
+   TEST EMAIL ROUTE (OPTIONAL DEBUG)
+===================================== */
+app.get("/test-email", async (req, res) => {
+
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
+
+  try {
+    await transporter.sendMail({
+      to: process.env.SMTP_USER,
+      subject: "Test Email",
+      text: "Email system is working"
+    });
+
+    res.send("✅ Test email sent");
+
+  } catch (err) {
+    console.error(err);
+    res.send("❌ Email failed");
+  }
+});
+
+/* =====================================
    START SERVER
-========================= */
-app.listen(3000, () => console.log("Server running on port 3000"));
+===================================== */
+app.listen(3000, () => {
+  console.log("🚀 Server running on port 3000");
+});
