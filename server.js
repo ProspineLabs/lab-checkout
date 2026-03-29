@@ -2,19 +2,38 @@ const express = require("express");
 const Stripe = require("stripe");
 const nodemailer = require("nodemailer");
 const bodyParser = require("body-parser");
+const cors = require("cors");
 
 const app = express();
 
-// 🔐 ENV VARIABLES
+/* ==============================
+   ✅ CORS FIX (VERY IMPORTANT)
+============================== */
+app.use(cors({
+  origin: "https://www.prospineorlando.com"
+}));
+
+/* ==============================
+   STRIPE
+============================== */
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-// IMPORTANT: raw body for webhook
+/* ==============================
+   BODY PARSING
+============================== */
 app.use("/webhook", bodyParser.raw({ type: "application/json" }));
 app.use(express.json());
 
-// ==============================
-// 📧 EMAIL SETUP (SMTP2GO)
-// ==============================
+/* ==============================
+   HEALTH CHECK (OPTIONAL)
+============================== */
+app.get("/", (req, res) => {
+  res.send("Server is running");
+});
+
+/* ==============================
+   EMAIL (SMTP2GO)
+============================== */
 const transporter = nodemailer.createTransport({
   host: "mail.smtp2go.com",
   port: 2525,
@@ -24,9 +43,9 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// ==============================
-// 🧾 CREATE CHECKOUT SESSION
-// ==============================
+/* ==============================
+   CREATE CHECKOUT SESSION
+============================== */
 app.post("/create-checkout-session", async (req, res) => {
   try {
     console.log("🧾 Creating checkout session...");
@@ -70,13 +89,12 @@ app.post("/create-checkout-session", async (req, res) => {
   }
 });
 
-// ==============================
-// 🔔 WEBHOOK
-// ==============================
+/* ==============================
+   WEBHOOK
+============================== */
 app.post("/webhook", async (req, res) => {
 
   const sig = req.headers["stripe-signature"];
-
   let event;
 
   try {
@@ -114,9 +132,9 @@ app.post("/webhook", async (req, res) => {
 
     const total = tests.reduce((sum, t) => sum + t.price, 0);
 
-    // ==============================
-    // 📧 EMAIL CONTENT
-    // ==============================
+    /* ==============================
+       EMAIL HTML
+    ============================== */
     const emailHTML = `
       <div style="font-family:Arial; max-width:600px; margin:auto;">
 
@@ -163,10 +181,8 @@ app.post("/webhook", async (req, res) => {
     `;
 
     try {
-
       console.log("📨 Sending email...");
 
-      // Patient email
       await transporter.sendMail({
         from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
         to: email,
@@ -174,7 +190,6 @@ app.post("/webhook", async (req, res) => {
         html: emailHTML,
       });
 
-      // Clinic email
       await transporter.sendMail({
         from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
         to: process.env.SMTP_USER,
@@ -192,9 +207,9 @@ app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
 });
 
-// ==============================
-// 🚀 START SERVER
-// ==============================
+/* ==============================
+   START SERVER
+============================== */
 app.listen(3000, () => {
   console.log("🚀 Server running on port 3000");
 });
