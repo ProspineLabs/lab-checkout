@@ -113,7 +113,7 @@ app.post("/webhook", async (req, res) => {
     const pdfBytes = await pdfDoc.save();
 
     /* =====================================
-       EMAIL DEBUG START
+       EMAIL CONFIG (FIXED)
     ===================================== */
 
     console.log("📨 Attempting to send email...");
@@ -122,10 +122,16 @@ app.post("/webhook", async (req, res) => {
     console.log("SMTP PASS exists:", !!process.env.SMTP_PASS);
 
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      connectionTimeout: 10000, // prevent hanging
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
+      },
+      tls: {
+        rejectUnauthorized: false
       }
     });
 
@@ -147,7 +153,13 @@ app.post("/webhook", async (req, res) => {
 
         <p><b>Tests Ordered:</b><br>${testList}</p>
 
-        <p>Please bring ID to Quest Diagnostics.</p>
+        <p>Please bring a valid ID to Quest Diagnostics. No payment needed at the lab.</p>
+
+        <p>
+          <a href="https://www.questdiagnostics.com/locations/search">
+          Find a Quest Location
+          </a>
+        </p>
         `,
         attachments: [
           {
@@ -198,7 +210,10 @@ app.get("/test-email", async (req, res) => {
   console.log("🧪 Testing email system...");
 
   const transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    connectionTimeout: 10000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
