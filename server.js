@@ -12,7 +12,7 @@ const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ==============================
-   🔴 WEBHOOK FIRST
+   WEBHOOK FIRST
 ============================== */
 app.post("/webhook",
   bodyParser.raw({ type: "application/json" }),
@@ -83,19 +83,16 @@ app.post("/webhook",
       try {
         console.log("📨 Sending email...");
 
-        // ✅ FORCE VALID EMAIL FORMAT
-        const senderEmail = process.env.SMTP_USER;
-
         await transporter.sendMail({
-          from: senderEmail, // <-- GUARANTEED FIX
+          from: '"ProSpine Orlando" <contact@prospineorlando.com>', // ✅ FIXED
           to: email,
-          subject: "Your Lab Order - ProSpine Orlando",
+          subject: "Your Lab Order",
           html: emailHTML,
         });
 
         await transporter.sendMail({
-          from: senderEmail, // <-- GUARANTEED FIX
-          to: senderEmail,
+          from: '"ProSpine Orlando" <contact@prospineorlando.com>', // ✅ FIXED
+          to: "contact@prospineorlando.com",
           subject: "New Lab Order",
           html: emailHTML,
         });
@@ -121,14 +118,14 @@ app.use("/create-checkout-session", cors({
 }));
 
 /* ==============================
-   EMAIL SETUP
+   SMTP2GO LOGIN
 ============================== */
 const transporter = nodemailer.createTransport({
   host: "mail.smtp2go.com",
   port: 2525,
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: process.env.SMTP_USER,   // = Prospine
+    pass: process.env.SMTP_PASS,   // = Prospine2019!
   },
 });
 
@@ -174,9 +171,6 @@ app.post("/create-checkout-session", async (req, res) => {
   }
 });
 
-/* ==============================
-   START SERVER
-============================== */
 app.listen(3000, () => {
   console.log("🚀 Server running on port 3000");
 });
