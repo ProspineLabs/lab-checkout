@@ -44,7 +44,6 @@ app.post("/webhook",
       const name = session.metadata.name;
       const dob = session.metadata.dob;
       const email = session.metadata.email;
-      const phone = session.metadata.phone;
       const tests = JSON.parse(session.metadata.tests);
 
       const testListHTML = tests.map(t => `
@@ -69,13 +68,13 @@ app.post("/webhook",
 
           <hr>
 
-          <div style="text-align:center; margin-top:15px;">
+          <div style="text-align:center;">
             <a href="https://appointment.questdiagnostics.com/as-home">
               <img src="https://www.prospineorlando.com/exams/quest.png" 
-              style="width:140px; display:block; margin:auto; margin-bottom:10px;" />
-              <span style="display:inline-block; padding:12px 20px; background:#2c7be5; color:#fff; border-radius:6px;">
+              style="width:140px; margin-bottom:10px;" />
+              <div style="background:#2c7be5; color:#fff; padding:12px; border-radius:6px;">
                 Schedule Your Appointment
-              </span>
+              </div>
             </a>
           </div>
         </div>
@@ -84,16 +83,19 @@ app.post("/webhook",
       try {
         console.log("📨 Sending email...");
 
+        // ✅ FORCE VALID EMAIL FORMAT
+        const senderEmail = process.env.SMTP_USER;
+
         await transporter.sendMail({
-          from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`, // ✅ FIXED
+          from: senderEmail, // <-- GUARANTEED FIX
           to: email,
-          subject: "Your Lab Order",
+          subject: "Your Lab Order - ProSpine Orlando",
           html: emailHTML,
         });
 
         await transporter.sendMail({
-          from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`, // ✅ FIXED
-          to: process.env.SMTP_USER,
+          from: senderEmail, // <-- GUARANTEED FIX
+          to: senderEmail,
           subject: "New Lab Order",
           html: emailHTML,
         });
@@ -119,7 +121,7 @@ app.use("/create-checkout-session", cors({
 }));
 
 /* ==============================
-   EMAIL (SMTP2GO)
+   EMAIL SETUP
 ============================== */
 const transporter = nodemailer.createTransport({
   host: "mail.smtp2go.com",
@@ -131,7 +133,7 @@ const transporter = nodemailer.createTransport({
 });
 
 /* ==============================
-   CHECKOUT SESSION
+   CHECKOUT
 ============================== */
 app.post("/create-checkout-session", async (req, res) => {
 
