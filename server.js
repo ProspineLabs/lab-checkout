@@ -39,7 +39,7 @@ function drawBox(doc, y, height) {
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
 
-    const doc = new PDFDocument({ margin: 40 });
+    const doc = new PDFDocument({ margin: 50 });
     const buffers = [];
 
     doc.on("data", buffers.push.bind(buffers));
@@ -47,106 +47,81 @@ function generatePDF(name, dob, gender, tests) {
 
     /* ================= LOGO ================= */
     if (fs.existsSync(LOGO_PATH)) {
-      doc.image(LOGO_PATH, 200, 15, { width: 180 }); // ✅ fixed size & position
+      doc.image(LOGO_PATH, 220, 20, { width: 150 }); // smaller + centered
     }
 
     /* ================= TITLE ================= */
-    const TITLE_Y = 110;
+    doc.y = 120;
 
     doc.fontSize(18)
       .fillColor("#2c7be5")
-      .text("LAB ORDER SUMMARY", 0, TITLE_Y, { align: "center" });
+      .text("LAB ORDER SUMMARY", { align: "center" });
 
-    /* Divider line */
-    doc.moveTo(60, TITLE_Y + 25)
-      .lineTo(540, TITLE_Y + 25)
-      .strokeColor("#2c7be5")
-      .lineWidth(2)
-      .stroke();
+    doc.moveDown(2); // 🔥 MORE SPACE
 
-    /* ================= BODY START ================= */
-    const BODY_START = 160;
-    doc.y = BODY_START;
+    /* ================= PATIENT ================= */
+    doc.fontSize(13).fillColor("black")
+      .text("Patient Information", { underline: true });
 
-    let yStart;
-
-    /* ================= PATIENT BOX ================= */
-    yStart = doc.y;
-    drawBox(doc, yStart - 5, 80);
-
-    doc.fontSize(12)
-      .fillColor("black")
-      .text("Patient Information", 50, yStart);
-
-    doc.moveDown(0.5);
+    doc.moveDown(0.8);
 
     doc.fontSize(11)
-      .text(`Name: ${name}`)
-      .text(`DOB: ${dob}`)
-      .text(`Gender: ${gender}`);
+      .text(`   Name: ${name}`)
+      .text(`   DOB: ${dob}`)
+      .text(`   Gender: ${gender}`);
 
-    doc.moveDown(2);
+    doc.moveDown(2); // 🔥 MORE SPACE
 
-    /* ================= TEST BOX ================= */
-    yStart = doc.y;
-    const testBoxHeight = tests.length * 22 + 40;
+    /* ================= TESTS ================= */
+    doc.fontSize(13)
+      .text("Ordered Tests", { underline: true });
 
-    drawBox(doc, yStart - 5, testBoxHeight);
-
-    doc.fontSize(12)
-      .text("Ordered Tests", 50, yStart);
-
-    doc.moveDown(0.5);
+    doc.moveDown(0.8);
 
     tests.forEach(t => {
-      doc.fontSize(11).fillColor("black")
-        .text(`${t.name} (Code: ${t.code}) - $${t.price}`);
+      doc.fontSize(11)
+        .text(`   • ${t.name} (Code: ${t.code})`); // ❌ price removed
 
       if (TEST_INSTRUCTIONS[t.code]) {
-        doc.fontSize(10)
-          .fillColor("#2c7be5")
-          .text(`   * ${TEST_INSTRUCTIONS[t.code]}`);
+        doc.fillColor("#2c7be5")
+          .text(`      - ${TEST_INSTRUCTIONS[t.code]}`);
+        doc.fillColor("black");
       }
 
-      doc.moveDown(0.5);
+      doc.moveDown(0.6); // spacing between tests
     });
-
-    doc.moveDown(1);
-
-    /* ================= PROVIDER BOX ================= */
-    yStart = doc.y;
-    drawBox(doc, yStart - 5, 90);
-
-    doc.fontSize(12)
-      .text("Ordering Provider", 50, yStart);
-
-    doc.moveDown(0.5);
-
-    doc.fontSize(11)
-      .text("Dr. Cleberton S. Bastos, DC")
-      .text("NPI: 1013268028")
-      .text("ProSpine Orlando Chiropractic")
-      .text("Quest Account: 11845569");
 
     doc.moveDown(2);
 
-    /* ================= INSTRUCTIONS BOX ================= */
-    yStart = doc.y;
-    drawBox(doc, yStart - 5, 80);
+    /* ================= PROVIDER ================= */
+    doc.fontSize(13)
+      .text("Ordering Provider", { underline: true });
 
-    doc.fontSize(12)
-      .text("Instructions", 50, yStart);
-
-    doc.moveDown(0.5);
+    doc.moveDown(0.8);
 
     doc.fontSize(11)
-      .text("• Bring a valid photo ID")
-      .text("• No payment required at the lab")
-      .text("• Follow test-specific instructions above");
+      .text("   Dr. Cleberton S. Bastos, DC")
+      .text("   NPI: 1013268028")
+      .text("   ProSpine Orlando Chiropractic")
+      .text("   Quest Account: 11845569");
+
+    doc.moveDown(2);
+
+    /* ================= INSTRUCTIONS ================= */
+    doc.fontSize(13)
+      .text("Instructions", { underline: true });
+
+    doc.moveDown(0.8);
+
+    doc.fontSize(11)
+      .text("   • Bring a valid photo ID")
+      .text("   • No payment required at the lab")
+      .text("   • Follow test-specific instructions above");
 
     doc.end();
   });
 }
+
 
 /* ==============================
    WEBHOOK
