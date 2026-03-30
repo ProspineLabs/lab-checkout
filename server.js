@@ -29,7 +29,7 @@ async function getImageBuffer(url) {
 }
 
 /* ==============================
-   PREMIUM PDF GENERATOR
+   PREMIUM PDF
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise(async (resolve) => {
@@ -42,7 +42,6 @@ function generatePDF(name, dob, gender, tests) {
 
     const orderId = "PSO-" + Date.now().toString().slice(-6);
 
-    /* LOGO */
     try {
       const logo = await getImageBuffer("https://www.prospineorlando.com/images/logo-5-stars.png");
       doc.image(logo, 170, 20, { width: 240 });
@@ -50,7 +49,6 @@ function generatePDF(name, dob, gender, tests) {
 
     doc.moveDown(3);
 
-    /* HEADER */
     doc.fontSize(18).fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", { align: "center" });
 
@@ -69,33 +67,28 @@ function generatePDF(name, dob, gender, tests) {
 
     doc.moveDown();
 
-    /* PATIENT BOX */
     doc.fontSize(12).fillColor("black")
       .text("Patient Information", { underline: true });
 
     doc.moveDown(0.5);
 
-    doc.fontSize(11);
     doc.text(`Name: ${name}`);
     doc.text(`DOB: ${dob}`);
     doc.text(`Gender: ${gender}`);
 
     doc.moveDown();
 
-    /* TESTS SECTION */
-    doc.fontSize(12).text("Ordered Tests", { underline: true });
+    doc.text("Ordered Tests", { underline: true });
     doc.moveDown(0.5);
 
     tests.forEach(t => {
       doc.fontSize(11).fillColor("black")
-        .text(`${t.name} (Code: ${t.code})`, { continued: true });
-
-      doc.text(`   $${t.price}`);
+        .text(`${t.name} (Code: ${t.code}) - $${t.price}`);
 
       const instr = TEST_INSTRUCTIONS[t.code];
       if (instr) {
-        const color = instr.type === "critical" ? "red" : "#2c7be5";
-        doc.fontSize(10).fillColor(color)
+        doc.fontSize(10)
+          .fillColor(instr.type === "critical" ? "red" : "#2c7be5")
           .text(`   * ${instr.text}`);
       }
 
@@ -104,7 +97,6 @@ function generatePDF(name, dob, gender, tests) {
 
     doc.moveDown();
 
-    /* PROVIDER */
     doc.fontSize(12).fillColor("black")
       .text("Ordering Provider", { underline: true });
 
@@ -118,7 +110,6 @@ function generatePDF(name, dob, gender, tests) {
 
     doc.moveDown();
 
-    /* GENERAL INSTRUCTIONS */
     doc.fontSize(12).text("General Instructions", { underline: true });
 
     doc.moveDown(0.5);
@@ -130,7 +121,6 @@ function generatePDF(name, dob, gender, tests) {
 
     doc.moveDown();
 
-    /* FOOTER */
     doc.fontSize(9).fillColor("gray")
       .text(
         "All laboratory testing is performed by Quest Diagnostics. ProSpine Orlando facilitates ordering and payment collection.",
@@ -212,6 +202,7 @@ app.post("/webhook",
       <div>
         <h2>New Lab Order</h2>
         <p>${name} | ${dob} | ${gender}</p>
+
         <ul>
         ${tests.map(t=>{
           const instr = TEST_INSTRUCTIONS[t.code];
@@ -220,23 +211,29 @@ app.post("/webhook",
           </li>`;
         }).join("")}
         </ul>
+
         <h3>Total: $${total}</h3>
       </div>`;
 
-      await transporter.sendMail({
-        from: '"ProSpine Orlando" <contact@prospineorlando.com>',
-        to: email,
-        subject: "Your Lab Order",
-        html: patientHTML,
-        attachments: [{ filename: "Lab_Order.pdf", content: pdf }]
-      });
+      try {
+        await transporter.sendMail({
+          from: '"ProSpine Orlando" <contact@prospineorlando.com>',
+          to: email,
+          subject: "Your Lab Order",
+          html: patientHTML,
+          attachments: [{ filename: "Lab_Order.pdf", content: pdf }]
+        });
 
-      await transporter.sendMail({
-        from: '"ProSpine Orlando" <contact@prospineorlando.com>',
-        to: "contact@prospineorlando.com",
-        subject: "New Lab Order",
-        html: clinicHTML
-      });
+        await transporter.sendMail({
+          from: '"ProSpine Orlando" <contact@prospineorlando.com>',
+          to: "contact@prospineorlando.com",
+          subject: "New Lab Order",
+          html: clinicHTML
+        });
+
+      } catch (err) {
+        console.error("Email error:", err);
+      }
     }
 
     res.sendStatus(200);
@@ -247,7 +244,10 @@ app.post("/webhook",
    MIDDLEWARE
 ============================== */
 app.use(express.json());
-app.use("/create-checkout-session", cors({ origin: "https://www.prospineorlando.com" }));
+
+app.use("/create-checkout-session", cors({
+  origin: "https://www.prospineorlando.com"
+}));
 
 /* ==============================
    EMAIL CONFIG
@@ -262,38 +262,53 @@ const transporter = nodemailer.createTransport({
 });
 
 /* ==============================
-   CHECKOUT
+   CHECKOUT (FIXED)
 ============================== */
 app.post("/create-checkout-session", async (req, res) => {
 
-  const { name, dob, email, phone, gender, tests } = req.body;
+  try {
+    const { name, dob, email, phone, gender, tests } = req.body;
 
-  const clean = tests.map(t => ({
-    name: t.name,
-    code: t.code,
-    price: t.price
-  }));
+    const clean = tests.map(t => ({
+      name: t.name,
+      code: t.code,
+      price: t.price
+    }));
 
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ["card"],
-    mode: "payment",
-    line_items: clean.map(t => ({
-      price_data: {
-        currency: "usd",
-        product_data: { name: t.name },
-        unit_amount: t.price * 100
-      },
-      quantity: 1
-    }),
-    success_url: "https://www.prospineorlando.com/success/index.html",
-    cancel_url: "https://www.prospineorlando.com/cancel/index.html",
-    metadata: {
-      name, dob, gender, email, phone,
-      tests: JSON.stringify(clean)
-    }
-  });
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
 
-  res.json({ url: session.url });
+      line_items: clean.map(t => ({
+        price_data: {
+          currency: "usd",
+          product_data: { name: t.name },
+          unit_amount: t.price * 100
+        },
+        quantity: 1
+      })), // ✅ FIXED HERE
+
+      success_url: "https://www.prospineorlando.com/success/index.html",
+      cancel_url: "https://www.prospineorlando.com/cancel/index.html",
+
+      metadata: {
+        name,
+        dob,
+        gender,
+        email,
+        phone,
+        tests: JSON.stringify(clean)
+      }
+    });
+
+    res.json({ url: session.url });
+
+  } catch (err) {
+    console.error("Stripe error:", err);
+    res.status(500).send("Error creating checkout session");
+  }
 });
 
-app.listen(3000, () => console.log("Server running"));
+app.listen(3000, () => {
+  console.log("Server running");
+});
