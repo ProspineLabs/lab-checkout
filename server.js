@@ -29,16 +29,9 @@ async function getImageBuffer(url) {
 }
 
 /* ==============================
-   GROUP FASTING TESTS
+   PDF
 ============================== */
-function getFastingTests(tests) {
-  return tests.filter(t => TEST_INSTRUCTIONS[t.code]?.type === "fasting");
-}
-
-/* ==============================
-   PDF GENERATOR
-============================== */
-function generatePDF(name, dob, tests) {
+function generatePDF(name, dob, gender, tests) {
   return new Promise(async (resolve) => {
 
     const doc = new PDFDocument({ margin: 40 });
@@ -59,55 +52,29 @@ function generatePDF(name, dob, tests) {
     doc.fontSize(16).fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", { align: "center" });
 
-    doc.moveDown(0.5);
-    doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
-
     doc.moveDown();
-    doc.fontSize(10).fillColor("gray")
-      .text(`Order ID: ${orderId}`, { align: "right" });
+    doc.text(`Order ID: ${orderId}`, { align: "right" });
 
     doc.moveDown();
 
     doc.text("Patient Information", { underline: true });
     doc.text(`Name: ${name}`);
     doc.text(`DOB: ${dob}`);
+    doc.text(`Gender: ${gender}`);
 
     doc.moveDown();
 
     doc.text("Ordered Tests", { underline: true });
-    doc.moveDown(0.5);
 
     tests.forEach(t => {
-      doc.text(`- ${t.name} (Code: ${t.code})`);
-
+      doc.text(`- ${t.name} (${t.code})`);
       const instr = TEST_INSTRUCTIONS[t.code];
       if (instr) {
-        const color = instr.type === "critical" ? "red" : "#2c7be5";
-        doc.fontSize(10).fillColor(color)
+        doc.fillColor(instr.type === "critical" ? "red" : "#2c7be5")
           .text(`   * ${instr.text}`);
-        doc.fillColor("black").fontSize(12);
+        doc.fillColor("black");
       }
     });
-
-    const fastingTests = getFastingTests(tests);
-
-    if (fastingTests.length > 0) {
-      doc.moveDown();
-      doc.fillColor("red").text("Fasting required for:");
-      fastingTests.forEach(t => doc.text(`- ${t.name}`));
-      doc.fillColor("black");
-    }
-
-    doc.moveDown();
-    doc.text("Ordering Provider", { underline: true });
-    doc.text("Dr. Cleberton S. Bastos, DC");
-    doc.text("NPI: 1013268028");
-    doc.text("ProSpine Orlando Chiropractic");
-
-    doc.moveDown();
-    doc.text("General Instructions", { underline: true });
-    doc.text("- Bring a valid photo ID");
-    doc.text("- No payment required at the lab");
 
     doc.end();
   });
@@ -137,99 +104,80 @@ app.post("/webhook",
 
       const name = s.metadata.name;
       const dob = s.metadata.dob;
+      const gender = s.metadata.gender;
       const email = s.metadata.email;
       const phone = s.metadata.phone;
+
       const tests = JSON.parse(s.metadata.tests || "[]");
 
       const total = tests.reduce((sum, t) => sum + t.price, 0);
-      const pdf = await generatePDF(name, dob, tests);
 
-      const fastingTests = getFastingTests(tests);
+      const pdf = await generatePDF(name, dob, gender, tests);
 
-      /* ================= PATIENT EMAIL ================= */
+      /* PATIENT EMAIL */
       const patientHTML = `
-      <div style="font-family:Arial; max-width:600px; margin:auto; padding:20px;">
+      <div style="font-family:Arial; max-width:600px; margin:auto;">
+        <h2>Lab Order Confirmation</h2>
 
-        <div style="text-align:center;">
-          <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
-        </div>
+        <p><strong>${name}</strong><br>
+        DOB: ${dob}<br>
+        Gender: ${gender}</p>
 
-        <h2 style="text-align:center;">Lab Order Confirmation</h2>
-
-        <p><strong>Patient:</strong> ${name}<br>
-        <strong>DOB:</strong> ${dob}</p>
-
-        <h3>Tests:</h3>
         <ul>
         ${tests.map(t=>{
           const instr = TEST_INSTRUCTIONS[t.code];
-          const color = instr?.type === "critical" ? "red" : "#2c7be5";
-          return `
-          <li>
-            ${t.name} (${t.code}) - $${t.price}
-            ${instr ? `<br><span style="color:${color};font-size:13px;">* ${instr.text}</span>` : ""}
+          return `<li>${t.name} (${t.code}) - $${t.price}
+          ${instr ? `<br><span style="color:red;">* ${instr.text}</span>` : ""}
           </li>`;
         }).join("")}
         </ul>
 
-        ${fastingTests.length ? `
-        <p style="color:red;"><strong>Fasting required for:</strong><br>
-        ${fastingTests.map(t=>t.name).join("<br>")}
-        </p>` : ""}
+        <h3>Total: $${total}</h3>
 
-        <h3>Total Paid: $${total}</h3>
-
-        <div style="text-align:center; margin-top:20px;">
-          <a href="https://appointment.questdiagnostics.com/as-home">
-            <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br>
-            <span style="background:#2c7be5;color:white;padding:12px;border-radius:6px;">
-              Schedule Appointment
-            </span>
-          </a>
-        </div>
-
-        <p>
-        - Bring ID<br>
-        - No payment at lab
-        </p>
-
+        <a href="https://appointment.questdiagnostics.com/as-home">
+          Schedule Appointment
+        </a>
       </div>`;
 
-      /* ================= CLINIC EMAIL ================= */
+      /* CLINIC EMAIL */
       const clinicHTML = `
-      <div style="font-family:Arial;">
+      <div>
         <h2>New Lab Order</h2>
-        <p>${name} | ${dob}</p>
+
+        <p>
+        Name: ${name}<br>
+        DOB: ${dob}<br>
+        Gender: ${gender}<br>
+        Email: ${email}<br>
+        Phone: ${phone}
+        </p>
 
         <ul>
         ${tests.map(t=>{
           const instr = TEST_INSTRUCTIONS[t.code];
-          return `<li>${t.name} (${t.code}) ${instr ? `<br>* ${instr.text}` : ""}</li>`;
+          return `<li>${t.name} (${t.code})
+          ${instr ? `<br>* ${instr.text}` : ""}
+          </li>`;
         }).join("")}
         </ul>
 
         <h3>Total: $${total}</h3>
       </div>`;
 
-      try {
-        await transporter.sendMail({
-          from: '"ProSpine Orlando" <contact@prospineorlando.com>',
-          to: email,
-          subject: "Your Lab Order",
-          html: patientHTML,
-          attachments: [{ filename: "Lab_Order.pdf", content: pdf }]
-        });
+      await transporter.sendMail({
+        from: '"ProSpine Orlando" <contact@prospineorlando.com>',
+        to: email,
+        subject: "Your Lab Order",
+        html: patientHTML,
+        attachments: [{ filename:"lab.pdf", content:pdf }]
+      });
 
-        await transporter.sendMail({
-          from: '"ProSpine Orlando" <contact@prospineorlando.com>',
-          to: "contact@prospineorlando.com",
-          subject: "New Lab Order",
-          html: clinicHTML
-        });
-
-      } catch (err) {
-        console.error(err);
-      }
+      await transporter.sendMail({
+        from: '"ProSpine Orlando" <contact@prospineorlando.com>',
+        to: "contact@prospineorlando.com",
+        subject: "New Lab Order",
+        html: clinicHTML
+      });
     }
 
     res.sendStatus(200);
@@ -242,16 +190,13 @@ app.post("/webhook",
 app.use(express.json());
 app.use("/create-checkout-session", cors({ origin: "https://www.prospineorlando.com" }));
 
-/* ==============================
-   EMAIL CONFIG
-============================== */
 const transporter = nodemailer.createTransport({
   host: "mail.smtp2go.com",
   port: 2525,
   auth: {
     user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
+    pass: process.env.SMTP_PASS
+  }
 });
 
 /* ==============================
@@ -259,43 +204,38 @@ const transporter = nodemailer.createTransport({
 ============================== */
 app.post("/create-checkout-session", async (req, res) => {
 
-  try {
-    const { name, dob, email, phone, tests } = req.body;
+  const { name, dob, email, phone, gender, tests } = req.body;
 
-    const clean = tests.map(t => ({
-      name: t.name,
-      code: t.code,
-      price: t.price
-    }));
+  const clean = tests.map(t => ({
+    name: t.name,
+    code: t.code,
+    price: t.price
+  }));
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      line_items: clean.map(t => ({
-        price_data: {
-          currency: "usd",
-          product_data: { name: t.name },
-          unit_amount: t.price * 100
-        },
-        quantity: 1
-      })),
-      success_url: "https://www.prospineorlando.com/success/index.html",
-      cancel_url: "https://www.prospineorlando.com/cancel/index.html",
-      metadata: {
-        name,
-        dob,
-        email,
-        phone,
-        tests: JSON.stringify(clean)
-      }
-    });
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ["card"],
+    mode: "payment",
+    line_items: clean.map(t => ({
+      price_data: {
+        currency: "usd",
+        product_data: { name: t.name },
+        unit_amount: t.price * 100
+      },
+      quantity: 1
+    })),
+    success_url: "https://www.prospineorlando.com/success/index.html",
+    cancel_url: "https://www.prospineorlando.com/cancel/index.html",
+    metadata: {
+      name,
+      dob,
+      gender,
+      email,
+      phone,
+      tests: JSON.stringify(clean)
+    }
+  });
 
-    res.json({ url: session.url });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error");
-  }
+  res.json({ url: session.url });
 });
 
 app.listen(3000, () => console.log("Server running"));
