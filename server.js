@@ -4,13 +4,21 @@ const nodemailer = require("nodemailer");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const PDFDocument = require("pdfkit");
-const QRCode = require("qrcode");
+const fetch = require("node-fetch");
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ==============================
-   PDF GENERATOR (PREMIUM)
+   LOAD IMAGE FROM URL
+============================== */
+async function getImageBuffer(url) {
+  const res = await fetch(url);
+  return await res.buffer();
+}
+
+/* ==============================
+   PDF GENERATOR (FINAL)
 ============================== */
 function generatePDF(name, dob, tests) {
   return new Promise(async (resolve) => {
@@ -23,14 +31,15 @@ function generatePDF(name, dob, tests) {
 
     const orderId = "PSO-" + Date.now().toString().slice(-6);
 
-    // QR (no 404)
-    const qrData = "https://www.prospineorlando.com/exams/exams.html";
-    const qrImage = await QRCode.toDataURL(qrData);
-
-    /* LOGO */
+    /* LOGO FROM WEBSITE */
     try {
-      doc.image("https://www.prospineorlando.com/images/logo-5-stars.png", 200, 20, { width: 180 });
-    } catch (e) {}
+      const logoBuffer = await getImageBuffer(
+        "https://www.prospineorlando.com/images/logo-5-stars.png"
+      );
+      doc.image(logoBuffer, 180, 20, { width: 200 });
+    } catch (err) {
+      console.log("Logo failed:", err.message);
+    }
 
     doc.moveDown(3);
 
@@ -40,9 +49,7 @@ function generatePDF(name, dob, tests) {
 
     doc.moveDown(0.5);
 
-    doc.strokeColor("#2c7be5")
-      .lineWidth(1)
-      .moveTo(40, doc.y)
+    doc.moveTo(40, doc.y)
       .lineTo(550, doc.y)
       .stroke();
 
@@ -53,78 +60,58 @@ function generatePDF(name, dob, tests) {
 
     doc.moveDown();
 
-    /* PATIENT BOX */
-    doc.rect(40, doc.y, 515, 60).stroke();
-
+    /* PATIENT */
     doc.fontSize(12).fillColor("black")
-      .text("Patient Information", 50, doc.y + 5);
+      .text("Patient Information", { underline: true });
 
-    doc.fontSize(11)
-      .text(`Name: ${name}`, 50, doc.y + 20)
-      .text(`DOB: ${dob}`, 50, doc.y + 35);
+    doc.moveDown(0.5);
 
-    doc.moveDown(3);
+    doc.text(`Name: ${name}`);
+    doc.text(`DOB: ${dob}`);
 
-    /* TESTS BOX */
-    const startY = doc.y;
+    doc.moveDown();
 
-    doc.rect(40, startY, 515, tests.length * 18 + 40).stroke();
-
-    doc.fontSize(12).text("Ordered Tests", 50, startY + 5);
-
-    let y = startY + 20;
+    /* TESTS */
+    doc.text("Ordered Tests", { underline: true });
+    doc.moveDown(0.5);
 
     tests.forEach(t => {
-      doc.fontSize(11).text(`• ${t.name} (Code: ${t.code})`, 50, y);
-      y += 15;
+      doc.text(`� ${t.name} (Code: ${t.code})`);
 
       if (t.instructions) {
         doc.fontSize(10).fillColor("#2c7be5")
-          .text(`⚠ ${t.instructions}`, 65, y);
-        doc.fillColor("black");
-        y += 12;
+          .text(`   ? ${t.instructions}`);
+        doc.fillColor("black").fontSize(12);
       }
     });
 
-    doc.moveDown(3);
+    doc.moveDown();
 
-    /* PROVIDER BOX */
-    const providerY = doc.y;
+    /* PROVIDER */
+    doc.text("Ordering Provider", { underline: true });
+    doc.moveDown(0.5);
 
-    doc.rect(40, providerY, 515, 80).stroke();
+    doc.text("Dr. Cleberton S. Bastos, DC");
+    doc.text("NPI: 1013268028");
+    doc.text("ProSpine Orlando Chiropractic");
+    doc.text("Quest Account: 11845569");
 
-    doc.fontSize(12).text("Ordering Provider", 50, providerY + 5);
+    doc.moveDown();
 
-    doc.fontSize(11)
-      .text("Dr. Cleberton S. Bastos, DC", 50, providerY + 20)
-      .text("NPI: 1013268028", 50, providerY + 35)
-      .text("ProSpine Orlando Chiropractic", 50, providerY + 50)
-      .text("Quest Account: 11845569", 50, providerY + 65);
+    /* INSTRUCTIONS */
+    doc.text("Instructions", { underline: true });
+    doc.moveDown(0.5);
 
-    doc.moveDown(4);
+    doc.text("� Bring a valid photo ID");
+    doc.text("� No payment required at the lab");
+    doc.text("� Follow fasting instructions if applicable");
 
-    /* INSTRUCTIONS BOX */
-    const instrY = doc.y;
-
-    doc.rect(40, instrY, 515, 80).stroke();
-
-    doc.fontSize(12).text("Instructions", 50, instrY + 5);
-
-    doc.fontSize(11)
-      .text("• Bring a valid photo ID", 50, instrY + 20)
-      .text("• No payment required at the lab", 50, instrY + 35)
-      .text("• Follow fasting instructions if applicable", 50, instrY + 50)
-      .text("• You may show this document on your phone", 50, instrY + 65);
-
-    /* QR */
-    doc.image(qrImage, 420, instrY + 10, { width: 100 });
-
-    doc.moveDown(2);
+    doc.moveDown();
 
     /* FOOTER */
     doc.fontSize(9).fillColor("gray")
       .text(
-        "All laboratory testing is performed by Quest Diagnostics, a third-party CLIA-certified laboratory. ProSpine Orlando facilitates ordering and payment collection.",
+        "All laboratory testing is performed by Quest Diagnostics. ProSpine Orlando facilitates ordering and payment collection.",
         { align: "center" }
       );
 
@@ -148,15 +135,13 @@ app.post("/webhook",
         sig,
         process.env.STRIPE_WEBHOOK_SECRET
       );
-      console.log("✅ Webhook verified:", event.type);
+      console.log("? Webhook verified:", event.type);
     } catch (err) {
-      console.log("❌ Webhook signature failed:", err.message);
+      console.log("? Webhook signature failed:", err.message);
       return res.sendStatus(400);
     }
 
     if (event.type === "checkout.session.completed") {
-
-      console.log("🔥 PAYMENT SUCCESS TRIGGERED");
 
       const session = event.data.object;
 
@@ -170,47 +155,88 @@ app.post("/webhook",
 
       const pdfBuffer = await generatePDF(name, dob, tests);
 
-      /* PATIENT EMAIL */
+      /* ==============================
+         PATIENT EMAIL (FULL RESTORED)
+      ============================== */
       const patientHTML = `
-      <div style="font-family:Arial; max-width:600px; margin:auto;">
-        <h2>Lab Order Confirmation</h2>
-        <p>Patient: ${name}</p>
-        <p>DOB: ${dob}</p>
-        <p>Total: $${total}</p>
+      <div style="font-family:Arial; max-width:600px; margin:auto; padding:20px;">
 
-        <a href="https://appointment.questdiagnostics.com/as-home">
-          <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br>
-          Schedule Appointment
-        </a>
+        <div style="text-align:center;">
+          <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
+        </div>
+
+        <h2 style="text-align:center;">Lab Order Confirmation</h2>
+
+        <p>Thank you for your order.</p>
+
+        <p><strong>Patient:</strong> ${name}<br>
+        <strong>DOB:</strong> ${dob}</p>
+
+        <h3>Selected Tests:</h3>
+        <ul>
+          ${tests.map(t => `<li>${t.name} (${t.code}) - $${t.price}</li>`).join("")}
+        </ul>
+
+        <h3>Total Paid: $${total}</h3>
+
+        <div style="text-align:center; margin-top:20px;">
+          <a href="https://appointment.questdiagnostics.com/as-home">
+            <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br>
+            <span style="background:#2c7be5;color:white;padding:12px;border-radius:6px;">
+              Schedule Your Appointment
+            </span>
+          </a>
+        </div>
+
+        <p style="margin-top:20px;">
+        ? Bring a valid ID<br>
+        ? No payment needed at the lab<br>
+        ? Follow fasting instructions if applicable
+        </p>
+
       </div>
       `;
 
-      /* CLINIC EMAIL */
+      /* ==============================
+         CLINIC EMAIL (FULL RESTORED)
+      ============================== */
       const clinicHTML = `
-      <div>
+      <div style="font-family:Arial; max-width:600px; margin:auto;">
+
         <h2>New Lab Order</h2>
-        <p>Name: ${name}</p>
-        <p>DOB: ${dob}</p>
-        <p>Email: ${email}</p>
-        <p>Phone: ${phone}</p>
+
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>DOB:</strong> ${dob}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${phone}</p>
+
+        <h3>Tests:</h3>
         <ul>
-        ${tests.map(t => `<li>${t.name} (${t.code})</li>`).join("")}
+          ${tests.map(t => `<li>${t.name} (Code: ${t.code})</li>`).join("")}
         </ul>
+
+        <h3>Total: $${total}</h3>
+
       </div>
       `;
 
       try {
+
+        /* PATIENT EMAIL (WITH PDF) */
         await transporter.sendMail({
           from: '"ProSpine Orlando" <contact@prospineorlando.com>',
           to: email,
-          subject: "Your Lab Order",
+          subject: "Your Lab Order - ProSpine Orlando",
           html: patientHTML,
-          attachments: [{
-            filename: "Lab_Order.pdf",
-            content: pdfBuffer
-          }]
+          attachments: [
+            {
+              filename: "Lab_Order.pdf",
+              content: pdfBuffer
+            }
+          ]
         });
 
+        /* CLINIC EMAIL (NO PDF) */
         await transporter.sendMail({
           from: '"ProSpine Orlando" <contact@prospineorlando.com>',
           to: "contact@prospineorlando.com",
@@ -218,10 +244,10 @@ app.post("/webhook",
           html: clinicHTML
         });
 
-        console.log("✅ EMAILS SENT");
+        console.log("? EMAILS SENT");
 
       } catch (err) {
-        console.error(err);
+        console.error("? EMAIL ERROR:", err);
       }
     }
 
@@ -272,7 +298,10 @@ app.post("/create-checkout-session", async (req, res) => {
       success_url: "https://www.prospineorlando.com/success/index.html",
       cancel_url: "https://www.prospineorlando.com/cancel/index.html",
       metadata: {
-        name, dob, email, phone,
+        name,
+        dob,
+        email,
+        phone,
         tests: JSON.stringify(tests)
       }
     });
@@ -286,5 +315,5 @@ app.post("/create-checkout-session", async (req, res) => {
 });
 
 app.listen(3000, () => {
-  console.log("🚀 Server running on port 3000");
+  console.log("?? Server running on port 3000");
 });
