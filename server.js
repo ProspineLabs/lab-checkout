@@ -10,6 +10,17 @@ const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ==============================
+   TEST INSTRUCTIONS (FULL)
+============================== */
+const TEST_INSTRUCTIONS = {
+  "5363": "Avoid ejaculation and intense exercise for 48 hours before test",
+  "7600": "Fasting 9–12 hours required",
+  "623": "Avoid supplements 5–7 days prior",
+  "561": "Fasting recommended",
+  "90839": "Fasting recommended"
+};
+
+/* ==============================
    LOAD IMAGE FROM URL
 ============================== */
 async function getImageBuffer(url) {
@@ -37,9 +48,7 @@ function generatePDF(name, dob, tests) {
         "https://www.prospineorlando.com/images/logo-5-stars.png"
       );
       doc.image(logoBuffer, 180, 20, { width: 200 });
-    } catch (err) {
-      console.log("Logo failed:", err.message);
-    }
+    } catch (err) {}
 
     doc.moveDown(3);
 
@@ -48,11 +57,7 @@ function generatePDF(name, dob, tests) {
       .text("LAB ORDER SUMMARY", { align: "center" });
 
     doc.moveDown(0.5);
-
-    doc.moveTo(40, doc.y)
-      .lineTo(550, doc.y)
-      .stroke();
-
+    doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown();
 
     doc.fontSize(10).fillColor("gray")
@@ -65,7 +70,6 @@ function generatePDF(name, dob, tests) {
       .text("Patient Information", { underline: true });
 
     doc.moveDown(0.5);
-
     doc.text(`Name: ${name}`);
     doc.text(`DOB: ${dob}`);
 
@@ -77,6 +81,13 @@ function generatePDF(name, dob, tests) {
 
     tests.forEach(t => {
       doc.text(`- ${t.name} (Code: ${t.code})`);
+
+      const instr = TEST_INSTRUCTIONS[t.code];
+      if (instr) {
+        doc.fontSize(10).fillColor("#2c7be5")
+          .text(`   * ${instr}`);
+        doc.fillColor("black").fontSize(12);
+      }
     });
 
     doc.moveDown();
@@ -92,13 +103,13 @@ function generatePDF(name, dob, tests) {
 
     doc.moveDown();
 
-    /* INSTRUCTIONS */
-    doc.text("Instructions", { underline: true });
+    /* GENERAL INSTRUCTIONS */
+    doc.text("General Instructions", { underline: true });
     doc.moveDown(0.5);
 
     doc.text("- Bring a valid photo ID");
     doc.text("- No payment required at the lab");
-    doc.text("- Follow fasting instructions if applicable");
+    doc.text("- Follow any test-specific instructions listed above");
 
     doc.moveDown();
 
@@ -129,9 +140,7 @@ app.post("/webhook",
         sig,
         process.env.STRIPE_WEBHOOK_SECRET
       );
-      console.log("Webhook verified:", event.type);
     } catch (err) {
-      console.log("Webhook error:", err.message);
       return res.sendStatus(400);
     }
 
@@ -144,7 +153,6 @@ app.post("/webhook",
       const email = session.metadata.email;
       const phone = session.metadata.phone;
 
-      // SAFE PARSE
       let tests = [];
       try {
         tests = JSON.parse(session.metadata.tests || "[]");
@@ -157,6 +165,7 @@ app.post("/webhook",
       /* PATIENT EMAIL */
       const patientHTML = `
       <div style="font-family:Arial; max-width:600px; margin:auto; padding:20px;">
+
         <div style="text-align:center;">
           <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
         </div>
@@ -170,7 +179,15 @@ app.post("/webhook",
 
         <h3>Selected Tests:</h3>
         <ul>
-          ${tests.map(t => `<li>${t.name} (${t.code}) - $${t.price}</li>`).join("")}
+          ${tests.map(t => {
+            const instr = TEST_INSTRUCTIONS[t.code];
+            return `
+              <li>
+                ${t.name} (${t.code}) - $${t.price}
+                ${instr ? `<br><span style="color:#2c7be5;font-size:13px;">* ${instr}</span>` : ""}
+              </li>
+            `;
+          }).join("")}
         </ul>
 
         <h3>Total Paid: $${total}</h3>
@@ -187,8 +204,9 @@ app.post("/webhook",
         <p style="margin-top:20px;">
         - Bring a valid ID<br>
         - No payment needed at the lab<br>
-        - Follow fasting instructions if applicable
+        - Follow any test-specific instructions listed above
         </p>
+
       </div>
       `;
 
@@ -204,7 +222,15 @@ app.post("/webhook",
 
         <h3>Tests:</h3>
         <ul>
-          ${tests.map(t => `<li>${t.name} (Code: ${t.code})</li>`).join("")}
+          ${tests.map(t => {
+            const instr = TEST_INSTRUCTIONS[t.code];
+            return `
+              <li>
+                ${t.name} (Code: ${t.code})
+                ${instr ? `<br>* ${instr}` : ""}
+              </li>
+            `;
+          }).join("")}
         </ul>
 
         <h3>Total: $${total}</h3>
@@ -231,10 +257,8 @@ app.post("/webhook",
           html: clinicHTML
         });
 
-        console.log("Emails sent");
-
       } catch (err) {
-        console.error("Email error:", err);
+        console.error(err);
       }
     }
 
@@ -298,14 +322,14 @@ app.post("/create-checkout-session", async (req, res) => {
         dob,
         email,
         phone,
-        tests: JSON.stringify(cleanTests) // FIXED
+        tests: JSON.stringify(cleanTests)
       }
     });
 
     res.json({ url: session.url });
 
   } catch (err) {
-    console.error("Stripe error:", err.message);
+    console.error(err);
     res.status(500).send("Error creating checkout session");
   }
 });
