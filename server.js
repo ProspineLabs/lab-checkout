@@ -34,7 +34,7 @@ function drawBox(doc, y, height) {
 }
 
 /* ==============================
-   PDF GENERATOR (FINAL)
+   PDF GENERATOR (FINAL FIX)
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
@@ -45,12 +45,13 @@ function generatePDF(name, dob, gender, tests) {
     doc.on("data", buffers.push.bind(buffers));
     doc.on("end", () => resolve(Buffer.concat(buffers)));
 
-    /* LOGO (LOCAL = GUARANTEED) */
+    /* ================= LOGO (TOP, FIXED) ================= */
     if (fs.existsSync(LOGO_PATH)) {
-      doc.image(LOGO_PATH, 160, 20, { width: 260 });
+      doc.image(LOGO_PATH, 150, 20, { width: 280 });
     }
 
-    doc.moveDown(3);
+    /* MOVE CURSOR BELOW LOGO */
+    doc.y = 130;
 
     /* TITLE */
     doc.fontSize(18).fillColor("#2c7be5")
@@ -163,26 +164,21 @@ app.post("/webhook",
       const dob = s.metadata.dob;
       const gender = s.metadata.gender;
       const email = s.metadata.email;
-      const phone = s.metadata.phone;
       const tests = JSON.parse(s.metadata.tests || "[]");
 
       const total = tests.reduce((sum, t) => sum + t.price, 0);
 
       const pdf = await generatePDF(name, dob, gender, tests);
 
-      /* PATIENT EMAIL */
       const patientHTML = `
-      <div style="font-family:Arial; max-width:600px; margin:auto; padding:20px;">
-
+      <div style="font-family:Arial; max-width:600px; margin:auto;">
         <div style="text-align:center;">
           <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
         </div>
 
         <h2 style="text-align:center;">Lab Order Confirmation</h2>
 
-        <p><strong>${name}</strong><br>
-        DOB: ${dob}<br>
-        Gender: ${gender}</p>
+        <p><strong>${name}</strong><br>DOB: ${dob}<br>Gender: ${gender}</p>
 
         <ul>
         ${tests.map(t=>`
@@ -202,13 +198,6 @@ app.post("/webhook",
             </span>
           </a>
         </div>
-
-        <p>
-        • Bring ID<br>
-        • No payment required at lab<br>
-        • Follow instructions above
-        </p>
-
       </div>`;
 
       await transporter.sendMail({
