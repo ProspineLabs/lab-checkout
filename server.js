@@ -29,7 +29,7 @@ async function getImageBuffer(url) {
 }
 
 /* ==============================
-   PDF
+   PREMIUM PDF GENERATOR
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise(async (resolve) => {
@@ -42,39 +42,100 @@ function generatePDF(name, dob, gender, tests) {
 
     const orderId = "PSO-" + Date.now().toString().slice(-6);
 
+    /* LOGO */
     try {
       const logo = await getImageBuffer("https://www.prospineorlando.com/images/logo-5-stars.png");
-      doc.image(logo, 180, 20, { width: 200 });
+      doc.image(logo, 170, 20, { width: 240 });
     } catch {}
 
     doc.moveDown(3);
 
-    doc.fontSize(16).fillColor("#2c7be5")
+    /* HEADER */
+    doc.fontSize(18).fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", { align: "center" });
 
-    doc.moveDown();
-    doc.text(`Order ID: ${orderId}`, { align: "right" });
+    doc.moveDown(0.5);
+
+    doc.moveTo(40, doc.y)
+      .lineTo(550, doc.y)
+      .lineWidth(2)
+      .strokeColor("#2c7be5")
+      .stroke();
 
     doc.moveDown();
 
-    doc.text("Patient Information", { underline: true });
+    doc.fontSize(10).fillColor("gray")
+      .text(`Order ID: ${orderId}`, { align: "right" });
+
+    doc.moveDown();
+
+    /* PATIENT BOX */
+    doc.fontSize(12).fillColor("black")
+      .text("Patient Information", { underline: true });
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(11);
     doc.text(`Name: ${name}`);
     doc.text(`DOB: ${dob}`);
     doc.text(`Gender: ${gender}`);
 
     doc.moveDown();
 
-    doc.text("Ordered Tests", { underline: true });
+    /* TESTS SECTION */
+    doc.fontSize(12).text("Ordered Tests", { underline: true });
+    doc.moveDown(0.5);
 
     tests.forEach(t => {
-      doc.text(`- ${t.name} (${t.code})`);
+      doc.fontSize(11).fillColor("black")
+        .text(`${t.name} (Code: ${t.code})`, { continued: true });
+
+      doc.text(`   $${t.price}`);
+
       const instr = TEST_INSTRUCTIONS[t.code];
       if (instr) {
-        doc.fillColor(instr.type === "critical" ? "red" : "#2c7be5")
+        const color = instr.type === "critical" ? "red" : "#2c7be5";
+        doc.fontSize(10).fillColor(color)
           .text(`   * ${instr.text}`);
-        doc.fillColor("black");
       }
+
+      doc.moveDown(0.3);
     });
+
+    doc.moveDown();
+
+    /* PROVIDER */
+    doc.fontSize(12).fillColor("black")
+      .text("Ordering Provider", { underline: true });
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(11)
+      .text("Dr. Cleberton S. Bastos, DC")
+      .text("NPI: 1013268028")
+      .text("ProSpine Orlando Chiropractic")
+      .text("Quest Account: 11845569");
+
+    doc.moveDown();
+
+    /* GENERAL INSTRUCTIONS */
+    doc.fontSize(12).text("General Instructions", { underline: true });
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(11)
+      .text("• Bring a valid photo ID")
+      .text("• No payment required at the lab")
+      .text("• Follow test-specific instructions listed above");
+
+    doc.moveDown();
+
+    /* FOOTER */
+    doc.fontSize(9).fillColor("gray")
+      .text(
+        "All laboratory testing is performed by Quest Diagnostics. ProSpine Orlando facilitates ordering and payment collection.",
+        { align: "center" }
+      );
 
     doc.end();
   });
@@ -88,6 +149,7 @@ app.post("/webhook",
   async (req, res) => {
 
     let event;
+
     try {
       event = stripe.webhooks.constructEvent(
         req.body,
@@ -117,7 +179,11 @@ app.post("/webhook",
       /* PATIENT EMAIL */
       const patientHTML = `
       <div style="font-family:Arial; max-width:600px; margin:auto;">
-        <h2>Lab Order Confirmation</h2>
+        <div style="text-align:center;">
+          <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
+        </div>
+
+        <h2 style="text-align:center;">Lab Order Confirmation</h2>
 
         <p><strong>${name}</strong><br>
         DOB: ${dob}<br>
@@ -134,24 +200,18 @@ app.post("/webhook",
 
         <h3>Total: $${total}</h3>
 
-        <a href="https://appointment.questdiagnostics.com/as-home">
-          Schedule Appointment
-        </a>
+        <div style="text-align:center;">
+          <a href="https://appointment.questdiagnostics.com/as-home">
+            Schedule Appointment
+          </a>
+        </div>
       </div>`;
 
       /* CLINIC EMAIL */
       const clinicHTML = `
       <div>
         <h2>New Lab Order</h2>
-
-        <p>
-        Name: ${name}<br>
-        DOB: ${dob}<br>
-        Gender: ${gender}<br>
-        Email: ${email}<br>
-        Phone: ${phone}
-        </p>
-
+        <p>${name} | ${dob} | ${gender}</p>
         <ul>
         ${tests.map(t=>{
           const instr = TEST_INSTRUCTIONS[t.code];
@@ -160,7 +220,6 @@ app.post("/webhook",
           </li>`;
         }).join("")}
         </ul>
-
         <h3>Total: $${total}</h3>
       </div>`;
 
@@ -169,7 +228,7 @@ app.post("/webhook",
         to: email,
         subject: "Your Lab Order",
         html: patientHTML,
-        attachments: [{ filename:"lab.pdf", content:pdf }]
+        attachments: [{ filename: "Lab_Order.pdf", content: pdf }]
       });
 
       await transporter.sendMail({
@@ -190,6 +249,9 @@ app.post("/webhook",
 app.use(express.json());
 app.use("/create-checkout-session", cors({ origin: "https://www.prospineorlando.com" }));
 
+/* ==============================
+   EMAIL CONFIG
+============================== */
 const transporter = nodemailer.createTransport({
   host: "mail.smtp2go.com",
   port: 2525,
@@ -222,15 +284,11 @@ app.post("/create-checkout-session", async (req, res) => {
         unit_amount: t.price * 100
       },
       quantity: 1
-    })),
+    }),
     success_url: "https://www.prospineorlando.com/success/index.html",
     cancel_url: "https://www.prospineorlando.com/cancel/index.html",
     metadata: {
-      name,
-      dob,
-      gender,
-      email,
-      phone,
+      name, dob, gender, email, phone,
       tests: JSON.stringify(clean)
     }
   });
