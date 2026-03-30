@@ -4,10 +4,13 @@ const nodemailer = require("nodemailer");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const PDFDocument = require("pdfkit");
-const fetch = require("node-fetch");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+const LOGO_PATH = path.join(__dirname, "logo.png");
 
 /* ==============================
    TEST INSTRUCTIONS
@@ -21,19 +24,6 @@ const TEST_INSTRUCTIONS = {
 };
 
 /* ==============================
-   LOAD IMAGE (SYNC SAFE)
-============================== */
-async function loadLogo() {
-  try {
-    const res = await fetch("https://www.prospineorlando.com/images/logo-5-stars.png");
-    const arrayBuffer = await res.arrayBuffer();
-    return Buffer.from(arrayBuffer);
-  } catch {
-    return null;
-  }
-}
-
-/* ==============================
    DRAW BOX
 ============================== */
 function drawBox(doc, y, height) {
@@ -44,108 +34,105 @@ function drawBox(doc, y, height) {
 }
 
 /* ==============================
-   PREMIUM PDF (BOXED)
+   PDF GENERATOR (FINAL)
 ============================== */
-async function generatePDF(name, dob, gender, tests) {
+function generatePDF(name, dob, gender, tests) {
+  return new Promise((resolve) => {
 
-  const doc = new PDFDocument({ margin: 40 });
-  const buffers = [];
+    const doc = new PDFDocument({ margin: 40 });
+    const buffers = [];
 
-  doc.on("data", buffers.push.bind(buffers));
+    doc.on("data", buffers.push.bind(buffers));
+    doc.on("end", () => resolve(Buffer.concat(buffers)));
 
-  const logo = await loadLogo();
-
-  /* LOGO */
-  if (logo) {
-    doc.image(logo, 160, 20, { width: 260 });
-  }
-
-  doc.moveDown(3);
-
-  /* TITLE */
-  doc.fontSize(18).fillColor("#2c7be5")
-    .text("LAB ORDER SUMMARY", { align: "center" });
-
-  doc.moveDown(1);
-
-  let yStart;
-
-  /* ================= PATIENT BOX ================= */
-  yStart = doc.y;
-  drawBox(doc, yStart - 5, 80);
-
-  doc.fontSize(12).fillColor("black")
-    .text("Patient Information", 50, yStart);
-
-  doc.moveDown(0.5);
-
-  doc.fontSize(11)
-    .text(`Name: ${name}`)
-    .text(`DOB: ${dob}`)
-    .text(`Gender: ${gender}`);
-
-  doc.moveDown(2);
-
-  /* ================= TEST BOX ================= */
-  yStart = doc.y;
-  const testBoxHeight = tests.length * 22 + 40;
-
-  drawBox(doc, yStart - 5, testBoxHeight);
-
-  doc.fontSize(12)
-    .text("Ordered Tests", 50, yStart);
-
-  doc.moveDown(0.5);
-
-  tests.forEach(t => {
-    doc.fontSize(11).fillColor("black")
-      .text(`${t.name} (Code: ${t.code}) - $${t.price}`);
-
-    if (TEST_INSTRUCTIONS[t.code]) {
-      doc.fontSize(10).fillColor("#2c7be5")
-        .text(`   * ${TEST_INSTRUCTIONS[t.code]}`);
+    /* LOGO (LOCAL = GUARANTEED) */
+    if (fs.existsSync(LOGO_PATH)) {
+      doc.image(LOGO_PATH, 160, 20, { width: 260 });
     }
 
+    doc.moveDown(3);
+
+    /* TITLE */
+    doc.fontSize(18).fillColor("#2c7be5")
+      .text("LAB ORDER SUMMARY", { align: "center" });
+
+    doc.moveDown(1);
+
+    let yStart;
+
+    /* ================= PATIENT BOX ================= */
+    yStart = doc.y;
+    drawBox(doc, yStart - 5, 80);
+
+    doc.fontSize(12).fillColor("black")
+      .text("Patient Information", 50, yStart);
+
     doc.moveDown(0.5);
-  });
 
-  doc.moveDown(1);
+    doc.fontSize(11)
+      .text(`Name: ${name}`)
+      .text(`DOB: ${dob}`)
+      .text(`Gender: ${gender}`);
 
-  /* ================= PROVIDER BOX ================= */
-  yStart = doc.y;
-  drawBox(doc, yStart - 5, 90);
+    doc.moveDown(2);
 
-  doc.fontSize(12).fillColor("black")
-    .text("Ordering Provider", 50, yStart);
+    /* ================= TEST BOX ================= */
+    yStart = doc.y;
+    const testBoxHeight = tests.length * 22 + 40;
 
-  doc.moveDown(0.5);
+    drawBox(doc, yStart - 5, testBoxHeight);
 
-  doc.fontSize(11)
-    .text("Dr. Cleberton S. Bastos, DC")
-    .text("NPI: 1013268028")
-    .text("ProSpine Orlando Chiropractic")
-    .text("Quest Account: 11845569");
+    doc.fontSize(12)
+      .text("Ordered Tests", 50, yStart);
 
-  doc.moveDown(2);
+    doc.moveDown(0.5);
 
-  /* ================= INSTRUCTIONS BOX ================= */
-  yStart = doc.y;
-  drawBox(doc, yStart - 5, 80);
+    tests.forEach(t => {
+      doc.fontSize(11).fillColor("black")
+        .text(`${t.name} (Code: ${t.code}) - $${t.price}`);
 
-  doc.fontSize(12)
-    .text("Instructions", 50, yStart);
+      if (TEST_INSTRUCTIONS[t.code]) {
+        doc.fontSize(10).fillColor("#2c7be5")
+          .text(`   * ${TEST_INSTRUCTIONS[t.code]}`);
+      }
 
-  doc.moveDown(0.5);
+      doc.moveDown(0.5);
+    });
 
-  doc.fontSize(11)
-    .text("• Bring a valid photo ID")
-    .text("• No payment required at the lab")
-    .text("• Follow test-specific instructions above");
+    doc.moveDown(1);
 
-  doc.end();
+    /* ================= PROVIDER BOX ================= */
+    yStart = doc.y;
+    drawBox(doc, yStart - 5, 90);
 
-  return new Promise(resolve => {
-    doc.on("end", () => resolve(Buffer.concat(buffers)));
+    doc.fontSize(12)
+      .text("Ordering Provider", 50, yStart);
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(11)
+      .text("Dr. Cleberton S. Bastos, DC")
+      .text("NPI: 1013268028")
+      .text("ProSpine Orlando Chiropractic")
+      .text("Quest Account: 11845569");
+
+    doc.moveDown(2);
+
+    /* ================= INSTRUCTIONS BOX ================= */
+    yStart = doc.y;
+    drawBox(doc, yStart - 5, 80);
+
+    doc.fontSize(12)
+      .text("Instructions", 50, yStart);
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(11)
+      .text("• Bring a valid photo ID")
+      .text("• No payment required at the lab")
+      .text("• Follow test-specific instructions above");
+
+    doc.end();
   });
 }
 
@@ -177,21 +164,25 @@ app.post("/webhook",
       const gender = s.metadata.gender;
       const email = s.metadata.email;
       const phone = s.metadata.phone;
-
       const tests = JSON.parse(s.metadata.tests || "[]");
+
       const total = tests.reduce((sum, t) => sum + t.price, 0);
 
       const pdf = await generatePDF(name, dob, gender, tests);
 
+      /* PATIENT EMAIL */
       const patientHTML = `
-      <div style="font-family:Arial; max-width:600px; margin:auto;">
+      <div style="font-family:Arial; max-width:600px; margin:auto; padding:20px;">
+
         <div style="text-align:center;">
           <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
         </div>
 
         <h2 style="text-align:center;">Lab Order Confirmation</h2>
 
-        <p><strong>${name}</strong><br>DOB: ${dob}<br>Gender: ${gender}</p>
+        <p><strong>${name}</strong><br>
+        DOB: ${dob}<br>
+        Gender: ${gender}</p>
 
         <ul>
         ${tests.map(t=>`
@@ -217,6 +208,7 @@ app.post("/webhook",
         • No payment required at lab<br>
         • Follow instructions above
         </p>
+
       </div>`;
 
       await transporter.sendMail({
