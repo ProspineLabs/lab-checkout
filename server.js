@@ -25,7 +25,6 @@ app.post("/webhook",
         process.env.STRIPE_WEBHOOK_SECRET
       );
       console.log("✅ Webhook verified:", event.type);
-
     } catch (err) {
       console.log("❌ Webhook signature failed:", err.message);
       return res.sendStatus(400);
@@ -40,21 +39,21 @@ app.post("/webhook",
       const name = session.metadata.name;
       const dob = session.metadata.dob;
       const email = session.metadata.email;
+      const phone = session.metadata.phone;
       const tests = JSON.parse(session.metadata.tests);
-
-      const testListHTML = tests.map(t => `
-        <li>${t.name} - $${t.price}</li>
-      `).join("");
 
       const total = tests.reduce((sum, t) => sum + t.price, 0);
 
       /* ==============================
-         ✉️ PREMIUM EMAIL DESIGN
+         PATIENT EMAIL (FRONT-END STYLE)
       ============================== */
-      const emailHTML = `
+      const patientTestList = tests.map(t => `
+        <li>${t.name} - $${t.price}</li>
+      `).join("");
+
+      const patientEmailHTML = `
         <div style="font-family:Arial; max-width:600px; margin:auto; padding:20px;">
 
-          <!-- LOGO -->
           <div style="text-align:center;">
             <img src="https://www.prospineorlando.com/images/logo-5-stars.png" 
             style="width:220px; margin-bottom:10px;" />
@@ -70,7 +69,7 @@ app.post("/webhook",
           <hr>
 
           <h3>Selected Tests:</h3>
-          <ul>${testListHTML}</ul>
+          <ul>${patientTestList}</ul>
 
           <h3>Total Paid: $${total}</h3>
 
@@ -78,66 +77,79 @@ app.post("/webhook",
 
           <h3 style="text-align:center;">Next Step</h3>
 
-          <p style="text-align:center;">
-          Schedule your lab appointment below:
-          </p>
-
-          <!-- QUEST BUTTON -->
-          <div style="text-align:center; margin-top:15px;">
+          <div style="text-align:center;">
             <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
-              
               <img src="https://www.prospineorlando.com/exams/quest.png" 
-              style="width:140px; display:block; margin:auto; margin-bottom:10px;" />
-
-              <span style="display:inline-block; padding:12px 22px; background:#2c7be5; color:#fff; border-radius:6px; font-weight:bold;">
+              style="width:140px; margin-bottom:10px;" />
+              <div style="background:#2c7be5; color:#fff; padding:12px; border-radius:6px;">
                 Schedule Your Appointment
-              </span>
+              </div>
             </a>
           </div>
 
-          <hr style="margin-top:25px;">
-
-          <!-- INSTRUCTIONS -->
-          <div style="font-size:14px; color:#333; margin-top:15px;">
-            <p><strong>Important Instructions:</strong></p>
-
-            <p>
-            ✔ Bring a valid photo ID<br>
-            ✔ No payment is required at the lab<br>
-            ✔ Follow fasting instructions if your test requires it<br>
-            ✔ Visit any Quest Diagnostics location convenient for you
-            </p>
-          </div>
+          <p style="margin-top:20px;">
+          ✔ Bring a valid photo ID<br>
+          ✔ No payment required at the lab<br>
+          ✔ Follow fasting instructions if applicable
+          </p>
 
           <hr>
 
-          <!-- COMPLIANCE -->
           <p style="font-size:12px; color:#777;">
           All laboratory testing is performed by a third-party CLIA-certified laboratory (Quest Diagnostics).  
-          ProSpine Orlando facilitates test ordering and payment collection as a convenience service.
+          ProSpine Orlando facilitates ordering and payment collection.
           </p>
 
         </div>
       `;
 
-      try {
-        console.log("📨 Sending email...");
+      /* ==============================
+         CLINIC EMAIL (BACK-END STYLE)
+      ============================== */
+      const clinicTestList = tests.map(t => `
+        <li>${t.name} (Quest Code: ${t.code}) - $${t.price}</li>
+      `).join("");
 
+      const clinicEmailHTML = `
+        <div style="font-family:Arial; max-width:600px; margin:auto; padding:20px;">
+
+          <h2>New Lab Order</h2>
+
+          <p><strong>Patient Name:</strong> ${name}</p>
+          <p><strong>DOB:</strong> ${dob}</p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Phone:</strong> ${phone}</p>
+
+          <hr>
+
+          <h3>Ordered Tests:</h3>
+          <ul>${clinicTestList}</ul>
+
+          <h3>Total: $${total}</h3>
+
+        </div>
+      `;
+
+      try {
+        console.log("📨 Sending emails...");
+
+        // Patient email
         await transporter.sendMail({
           from: '"ProSpine Orlando" <contact@prospineorlando.com>',
           to: email,
           subject: "Your Lab Order - ProSpine Orlando",
-          html: emailHTML,
+          html: patientEmailHTML,
         });
 
+        // Clinic email
         await transporter.sendMail({
           from: '"ProSpine Orlando" <contact@prospineorlando.com>',
           to: "contact@prospineorlando.com",
-          subject: "New Lab Order",
-          html: emailHTML,
+          subject: "New Lab Order - Patient: " + name,
+          html: clinicEmailHTML,
         });
 
-        console.log("✅ EMAIL SENT");
+        console.log("✅ EMAILS SENT");
 
       } catch (err) {
         console.error("❌ EMAIL ERROR:", err);
@@ -158,7 +170,7 @@ app.use("/create-checkout-session", cors({
 }));
 
 /* ==============================
-   EMAIL CONFIG
+   SMTP CONFIG
 ============================== */
 const transporter = nodemailer.createTransport({
   host: "mail.smtp2go.com",
