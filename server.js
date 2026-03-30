@@ -31,15 +31,13 @@ function generatePDF(name, dob, tests) {
 
     const orderId = "PSO-" + Date.now().toString().slice(-6);
 
-    /* LOGO FROM WEBSITE */
+    /* LOGO */
     try {
       const logoBuffer = await getImageBuffer(
         "https://www.prospineorlando.com/images/logo-5-stars.png"
       );
       doc.image(logoBuffer, 180, 20, { width: 200 });
-    } catch (err) {
-      console.log("Logo failed:", err.message);
-    }
+    } catch (err) {}
 
     doc.moveDown(3);
 
@@ -76,11 +74,11 @@ function generatePDF(name, dob, tests) {
     doc.moveDown(0.5);
 
     tests.forEach(t => {
-      doc.text(`• ${t.name} (Code: ${t.code})`);
+      doc.text(`- ${t.name} (Code: ${t.code})`);
 
       if (t.instructions) {
         doc.fontSize(10).fillColor("#2c7be5")
-          .text(`   ? ${t.instructions}`);
+          .text(`   * ${t.instructions}`);
         doc.fillColor("black").fontSize(12);
       }
     });
@@ -102,9 +100,9 @@ function generatePDF(name, dob, tests) {
     doc.text("Instructions", { underline: true });
     doc.moveDown(0.5);
 
-    doc.text("• Bring a valid photo ID");
-    doc.text("• No payment required at the lab");
-    doc.text("• Follow fasting instructions if applicable");
+    doc.text("- Bring a valid photo ID");
+    doc.text("- No payment required at the lab");
+    doc.text("- Follow fasting instructions if applicable");
 
     doc.moveDown();
 
