@@ -18,7 +18,7 @@ async function getImageBuffer(url) {
 }
 
 /* ==============================
-   PDF GENERATOR (FINAL)
+   PDF GENERATOR
 ============================== */
 function generatePDF(name, dob, tests) {
   return new Promise(async (resolve) => {
@@ -37,7 +37,9 @@ function generatePDF(name, dob, tests) {
         "https://www.prospineorlando.com/images/logo-5-stars.png"
       );
       doc.image(logoBuffer, 180, 20, { width: 200 });
-    } catch (err) {}
+    } catch (err) {
+      console.log("Logo failed:", err.message);
+    }
 
     doc.moveDown(3);
 
@@ -75,12 +77,6 @@ function generatePDF(name, dob, tests) {
 
     tests.forEach(t => {
       doc.text(`- ${t.name} (Code: ${t.code})`);
-
-      if (t.instructions) {
-        doc.fontSize(10).fillColor("#2c7be5")
-          .text(`   * ${t.instructions}`);
-        doc.fillColor("black").fontSize(12);
-      }
     });
 
     doc.moveDown();
@@ -133,9 +129,9 @@ app.post("/webhook",
         sig,
         process.env.STRIPE_WEBHOOK_SECRET
       );
-      console.log("? Webhook verified:", event.type);
+      console.log("Webhook verified:", event.type);
     } catch (err) {
-      console.log("? Webhook signature failed:", err.message);
+      console.log("Webhook error:", err.message);
       return res.sendStatus(400);
     }
 
@@ -147,18 +143,20 @@ app.post("/webhook",
       const dob = session.metadata.dob;
       const email = session.metadata.email;
       const phone = session.metadata.phone;
-      const tests = JSON.parse(session.metadata.tests);
+
+      // SAFE PARSE
+      let tests = [];
+      try {
+        tests = JSON.parse(session.metadata.tests || "[]");
+      } catch (e) {}
 
       const total = tests.reduce((sum, t) => sum + t.price, 0);
 
       const pdfBuffer = await generatePDF(name, dob, tests);
 
-      /* ==============================
-         PATIENT EMAIL (FULL RESTORED)
-      ============================== */
+      /* PATIENT EMAIL */
       const patientHTML = `
       <div style="font-family:Arial; max-width:600px; margin:auto; padding:20px;">
-
         <div style="text-align:center;">
           <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
         </div>
@@ -187,20 +185,16 @@ app.post("/webhook",
         </div>
 
         <p style="margin-top:20px;">
-        ? Bring a valid ID<br>
-        ? No payment needed at the lab<br>
-        ? Follow fasting instructions if applicable
+        - Bring a valid ID<br>
+        - No payment needed at the lab<br>
+        - Follow fasting instructions if applicable
         </p>
-
       </div>
       `;
 
-      /* ==============================
-         CLINIC EMAIL (FULL RESTORED)
-      ============================== */
+      /* CLINIC EMAIL */
       const clinicHTML = `
-      <div style="font-family:Arial; max-width:600px; margin:auto;">
-
+      <div style="font-family:Arial;">
         <h2>New Lab Order</h2>
 
         <p><strong>Name:</strong> ${name}</p>
@@ -214,27 +208,22 @@ app.post("/webhook",
         </ul>
 
         <h3>Total: $${total}</h3>
-
       </div>
       `;
 
       try {
 
-        /* PATIENT EMAIL (WITH PDF) */
         await transporter.sendMail({
           from: '"ProSpine Orlando" <contact@prospineorlando.com>',
           to: email,
-          subject: "Your Lab Order - ProSpine Orlando",
+          subject: "Your Lab Order",
           html: patientHTML,
-          attachments: [
-            {
-              filename: "Lab_Order.pdf",
-              content: pdfBuffer
-            }
-          ]
+          attachments: [{
+            filename: "Lab_Order.pdf",
+            content: pdfBuffer
+          }]
         });
 
-        /* CLINIC EMAIL (NO PDF) */
         await transporter.sendMail({
           from: '"ProSpine Orlando" <contact@prospineorlando.com>',
           to: "contact@prospineorlando.com",
@@ -242,10 +231,10 @@ app.post("/webhook",
           html: clinicHTML
         });
 
-        console.log("? EMAILS SENT");
+        console.log("Emails sent");
 
       } catch (err) {
-        console.error("? EMAIL ERROR:", err);
+        console.error("Email error:", err);
       }
     }
 
@@ -282,10 +271,17 @@ app.post("/create-checkout-session", async (req, res) => {
   try {
     const { name, dob, email, phone, tests } = req.body;
 
+    const cleanTests = tests.map(t => ({
+      name: t.name,
+      code: t.code,
+      price: t.price
+    }));
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "payment",
-      line_items: tests.map(t => ({
+
+      line_items: cleanTests.map(t => ({
         price_data: {
           currency: "usd",
           product_data: { name: t.name },
@@ -293,25 +289,27 @@ app.post("/create-checkout-session", async (req, res) => {
         },
         quantity: 1
       })),
+
       success_url: "https://www.prospineorlando.com/success/index.html",
       cancel_url: "https://www.prospineorlando.com/cancel/index.html",
+
       metadata: {
         name,
         dob,
         email,
         phone,
-        tests: JSON.stringify(tests)
+        tests: JSON.stringify(cleanTests) // FIXED
       }
     });
 
     res.json({ url: session.url });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Error");
+    console.error("Stripe error:", err.message);
+    res.status(500).send("Error creating checkout session");
   }
 });
 
 app.listen(3000, () => {
-  console.log("?? Server running on port 3000");
+  console.log("Server running on port 3000");
 });
