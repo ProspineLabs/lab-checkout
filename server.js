@@ -34,7 +34,7 @@ function drawBox(doc, y, height) {
 }
 
 /* ==============================
-   PDF GENERATOR (FINAL FIX)
+   PDF GENERATOR (HARD POSITIONING FIX)
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
@@ -45,19 +45,20 @@ function generatePDF(name, dob, gender, tests) {
     doc.on("data", buffers.push.bind(buffers));
     doc.on("end", () => resolve(Buffer.concat(buffers)));
 
-    /* ================= LOGO (TOP, FIXED) ================= */
+    /* ================= LOGO ================= */
     if (fs.existsSync(LOGO_PATH)) {
       doc.image(LOGO_PATH, 150, 20, { width: 280 });
     }
 
-    /* MOVE CURSOR BELOW LOGO */
-    doc.y = 130;
+    /* ================= TITLE (FORCED BELOW LOGO) ================= */
+    const TITLE_Y = 140;  // 🔥 force below logo
+    doc.fontSize(18)
+      .fillColor("#2c7be5")
+      .text("LAB ORDER SUMMARY", 0, TITLE_Y, { align: "center" });
 
-    /* TITLE */
-    doc.fontSize(18).fillColor("#2c7be5")
-      .text("LAB ORDER SUMMARY", { align: "center" });
-
-    doc.moveDown(1);
+    /* ================= BODY START ================= */
+    const BODY_START = 200;  // 🔥 BIG GAP — NO OVERLAP POSSIBLE
+    doc.y = BODY_START;
 
     let yStart;
 
