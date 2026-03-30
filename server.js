@@ -34,7 +34,7 @@ function drawBox(doc, y, height) {
 }
 
 /* ==============================
-   PDF GENERATOR (HARD POSITIONING FIX)
+   PDF GENERATOR (FINAL CLEAN)
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
@@ -47,17 +47,25 @@ function generatePDF(name, dob, gender, tests) {
 
     /* ================= LOGO ================= */
     if (fs.existsSync(LOGO_PATH)) {
-      doc.image(LOGO_PATH, 150, 20, { width: 280 });
+      doc.image(LOGO_PATH, 200, 15, { width: 180 }); // ✅ fixed size & position
     }
 
-    /* ================= TITLE (FORCED BELOW LOGO) ================= */
-    const TITLE_Y = 140;  // 🔥 force below logo
+    /* ================= TITLE ================= */
+    const TITLE_Y = 110;
+
     doc.fontSize(18)
       .fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", 0, TITLE_Y, { align: "center" });
 
+    /* Divider line */
+    doc.moveTo(60, TITLE_Y + 25)
+      .lineTo(540, TITLE_Y + 25)
+      .strokeColor("#2c7be5")
+      .lineWidth(2)
+      .stroke();
+
     /* ================= BODY START ================= */
-    const BODY_START = 200;  // 🔥 BIG GAP — NO OVERLAP POSSIBLE
+    const BODY_START = 160;
     doc.y = BODY_START;
 
     let yStart;
@@ -66,7 +74,8 @@ function generatePDF(name, dob, gender, tests) {
     yStart = doc.y;
     drawBox(doc, yStart - 5, 80);
 
-    doc.fontSize(12).fillColor("black")
+    doc.fontSize(12)
+      .fillColor("black")
       .text("Patient Information", 50, yStart);
 
     doc.moveDown(0.5);
@@ -94,7 +103,8 @@ function generatePDF(name, dob, gender, tests) {
         .text(`${t.name} (Code: ${t.code}) - $${t.price}`);
 
       if (TEST_INSTRUCTIONS[t.code]) {
-        doc.fontSize(10).fillColor("#2c7be5")
+        doc.fontSize(10)
+          .fillColor("#2c7be5")
           .text(`   * ${TEST_INSTRUCTIONS[t.code]}`);
       }
 
@@ -195,10 +205,16 @@ app.post("/webhook",
           <a href="https://appointment.questdiagnostics.com/as-home">
             <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br>
             <span style="background:#2c7be5;color:white;padding:12px;border-radius:6px;">
-              Schedule Appointment
+              Schedule Your Appointment
             </span>
           </a>
         </div>
+
+        <p>
+        • Bring ID<br>
+        • No payment required at lab<br>
+        • Follow instructions above
+        </p>
       </div>`;
 
       await transporter.sendMail({
