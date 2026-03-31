@@ -199,35 +199,49 @@ app.post("/webhook",
       const pdf = await generatePDF(name, dob, gender, tests);
 
       const patientHTML = `
-      <div style="font-family:Arial; max-width:600px; margin:auto;">
-        
-        <div style="text-align:center;">
-          <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
-        </div>
+<div style="font-family:Arial; max-width:600px; margin:auto; line-height:1.5;">
+  
+  <div style="text-align:center;">
+    <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
+  </div>
 
-        <h2 style="text-align:center;">Lab Order Confirmation</h2>
+  <h2 style="text-align:center;">Lab Order Confirmation</h2>
 
-        <p><strong>${name}</strong><br>DOB: ${dob}<br>Gender: ${gender}</p>
+  <p>
+    <strong>${name}</strong><br>
+    DOB: ${dob}<br>
+    Gender: ${gender}
+  </p>
 
-        <ul>
-        ${tests.map(t=>`
-          <li>${t.name} (${t.code})
-          ${TEST_INSTRUCTIONS[t.code] ? `<br>* ${TEST_INSTRUCTIONS[t.code]}` : ""}
-          </li>
-        `).join("")}
-        </ul>
+  <h3>Ordered Tests</h3>
 
-        <div style="text-align:center; margin-top:20px;">
-          <a href="https://appointment.questdiagnostics.com/as-home">
-            <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br><br>
-            <span style="background:#2c7be5;color:white;padding:12px 18px;border-radius:6px;">
-              Schedule Your Appointment
-            </span>
-          </a>
-        </div>
+  <ul>
+  ${tests.map(t=>`
+    <li>
+      ${t.name} (${t.code})
+      ${TEST_INSTRUCTIONS[t.code] ? `<br><span style="color:#2c7be5;">* ${TEST_INSTRUCTIONS[t.code]}</span>` : ""}
+    </li>
+  `).join("")}
+  </ul>
 
-      </div>`;
+  <h3>Instructions</h3>
 
+  <ul>
+    <li>Bring a valid photo ID</li>
+    <li>No payment required at the lab</li>
+    <li>Follow test-specific preparation instructions above</li>
+  </ul>
+
+  <div style="text-align:center; margin-top:25px;">
+    <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
+      <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br><br>
+      <span style="background:#2c7be5;color:white;padding:12px 18px;border-radius:6px;">
+        Schedule Your Appointment
+      </span>
+    </a>
+  </div>
+
+</div>`;
       await transporter.sendMail({
         from: '"ProSpine Orlando" <contact@prospineorlando.com>',
         to: email,
