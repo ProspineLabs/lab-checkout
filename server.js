@@ -28,100 +28,116 @@ const TEST_INSTRUCTIONS = {
 ============================== */
 function drawBox(doc, y, height) {
   doc.roundedRect(40, y, 520, height, 8)
-    .strokeColor("#d9d9d9")
+    .strokeColor("#e0e0e0")
     .lineWidth(1)
     .stroke();
 }
 
 /* ==============================
-   PDF GENERATOR (FINAL CLEAN)
+   PDF GENERATOR (FINAL)
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
 
-    const doc = new PDFDocument({ margin: 50 });
+    const doc = new PDFDocument({ margin: 40 });
     const buffers = [];
 
     doc.on("data", buffers.push.bind(buffers));
     doc.on("end", () => resolve(Buffer.concat(buffers)));
 
-    /* ================= LOGO ================= */
+    /* ================= HEADER AREA ================= */
+    const HEADER_HEIGHT = 120;
+
     if (fs.existsSync(LOGO_PATH)) {
-      doc.image(LOGO_PATH, 220, 20, { width: 150 }); // smaller + centered
+      doc.image(LOGO_PATH, 180, 20, { width: 200 });
     }
 
-    /* ================= TITLE ================= */
-    doc.y = 120;
-
+    /* Title BELOW header */
     doc.fontSize(18)
       .fillColor("#2c7be5")
-      .text("LAB ORDER SUMMARY", { align: "center" });
+      .text("LAB ORDER SUMMARY", 0, HEADER_HEIGHT, { align: "center" });
 
-    doc.moveDown(2); // 🔥 MORE SPACE
+    /* Force body BELOW header */
+    doc.y = HEADER_HEIGHT + 50;
 
-    /* ================= PATIENT ================= */
+    let yStart;
+
+    /* ================= PATIENT BOX ================= */
+    yStart = doc.y;
+    drawBox(doc, yStart - 8, 90);
+
     doc.fontSize(13).fillColor("black")
-      .text("Patient Information", { underline: true });
+      .text("Patient Information", 55, yStart);
 
-    doc.moveDown(0.8);
+    doc.moveDown(0.7);
 
     doc.fontSize(11)
-      .text(`   Name: ${name}`)
-      .text(`   DOB: ${dob}`)
-      .text(`   Gender: ${gender}`);
+      .text(`     Name: ${name}`)
+      .text(`     DOB: ${dob}`)
+      .text(`     Gender: ${gender}`);
 
-    doc.moveDown(2); // 🔥 MORE SPACE
+    doc.moveDown(2);
 
-    /* ================= TESTS ================= */
+    /* ================= TEST BOX ================= */
+    yStart = doc.y;
+
+    const testBoxHeight = tests.length * 28 + 50;
+    drawBox(doc, yStart - 8, testBoxHeight);
+
     doc.fontSize(13)
-      .text("Ordered Tests", { underline: true });
+      .text("Ordered Tests", 55, yStart);
 
-    doc.moveDown(0.8);
+    doc.moveDown(0.7);
 
     tests.forEach(t => {
       doc.fontSize(11)
-        .text(`   • ${t.name} (Code: ${t.code})`); // ❌ price removed
+        .text(`     • ${t.name} (Code: ${t.code})`);
 
       if (TEST_INSTRUCTIONS[t.code]) {
         doc.fillColor("#2c7be5")
-          .text(`      - ${TEST_INSTRUCTIONS[t.code]}`);
+          .text(`         - ${TEST_INSTRUCTIONS[t.code]}`);
         doc.fillColor("black");
       }
 
-      doc.moveDown(0.6); // spacing between tests
+      doc.moveDown(0.7);
     });
 
     doc.moveDown(2);
 
-    /* ================= PROVIDER ================= */
-    doc.fontSize(13)
-      .text("Ordering Provider", { underline: true });
+    /* ================= PROVIDER BOX ================= */
+    yStart = doc.y;
+    drawBox(doc, yStart - 8, 100);
 
-    doc.moveDown(0.8);
+    doc.fontSize(13)
+      .text("Ordering Provider", 55, yStart);
+
+    doc.moveDown(0.7);
 
     doc.fontSize(11)
-      .text("   Dr. Cleberton S. Bastos, DC")
-      .text("   NPI: 1013268028")
-      .text("   ProSpine Orlando Chiropractic")
-      .text("   Quest Account: 11845569");
+      .text("     Dr. Cleberton S. Bastos, DC")
+      .text("     NPI: 1013268028")
+      .text("     ProSpine Orlando Chiropractic")
+      .text("     Quest Account: 11845569");
 
     doc.moveDown(2);
 
-    /* ================= INSTRUCTIONS ================= */
-    doc.fontSize(13)
-      .text("Instructions", { underline: true });
+    /* ================= INSTRUCTIONS BOX ================= */
+    yStart = doc.y;
+    drawBox(doc, yStart - 8, 90);
 
-    doc.moveDown(0.8);
+    doc.fontSize(13)
+      .text("Instructions", 55, yStart);
+
+    doc.moveDown(0.7);
 
     doc.fontSize(11)
-      .text("   • Bring a valid photo ID")
-      .text("   • No payment required at the lab")
-      .text("   • Follow test-specific instructions above");
+      .text("     • Bring a valid photo ID")
+      .text("     • No payment required at the lab")
+      .text("     • Follow test-specific instructions above");
 
     doc.end();
   });
 }
-
 
 /* ==============================
    WEBHOOK
@@ -168,13 +184,13 @@ app.post("/webhook",
 
         <ul>
         ${tests.map(t=>`
-          <li>${t.name} (${t.code}) - $${t.price}
+          <li>${t.name} (${t.code})
           ${TEST_INSTRUCTIONS[t.code] ? `<br>* ${TEST_INSTRUCTIONS[t.code]}` : ""}
           </li>
         `).join("")}
         </ul>
 
-        <h3>Total: $${total}</h3>
+        <h3>Total Paid: $${total}</h3>
 
         <div style="text-align:center;">
           <a href="https://appointment.questdiagnostics.com/as-home">
@@ -184,12 +200,6 @@ app.post("/webhook",
             </span>
           </a>
         </div>
-
-        <p>
-        • Bring ID<br>
-        • No payment required at lab<br>
-        • Follow instructions above
-        </p>
       </div>`;
 
       await transporter.sendMail({
