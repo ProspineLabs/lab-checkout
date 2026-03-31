@@ -51,20 +51,20 @@ function drawBox(doc, y, height) {
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
 
-    const doc = new PDFDocument({ margin: 50 });
+    const doc = new PDFDocument({ margin: 40 });
     const buffers = [];
 
     doc.on("data", buffers.push.bind(buffers));
     doc.on("end", () => resolve(Buffer.concat(buffers)));
 
-    let currentY = 40;
+    let currentY = 30;
 
-    /* ===== LOGO (DYNAMIC CENTER) ===== */
+    /* ===== SMALLER LOGO ===== */
     if (fs.existsSync(LOGO_PATH)) {
 
       const image = doc.openImage(LOGO_PATH);
 
-      const maxWidth = 200;
+      const maxWidth = 140; // 🔥 smaller logo
       const scale = maxWidth / image.width;
 
       const displayWidth = maxWidth;
@@ -76,88 +76,87 @@ function generatePDF(name, dob, gender, tests) {
         width: displayWidth
       });
 
-      currentY += displayHeight + 25;
+      currentY += displayHeight + 10; // 🔥 tighter spacing
     }
 
-    /* ===== FORCE CONTENT BELOW LOGO ===== */
     doc.y = currentY;
 
-    /* ===== TITLE ===== */
-    doc.fontSize(18)
+    /* ===== TITLE (TIGHTER) ===== */
+    doc.fontSize(15)
       .fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", { align: "center" });
 
-    doc.moveDown(2);
+    doc.moveDown(1);
 
     /* ===== PATIENT BOX ===== */
     let yStart = doc.y;
-    drawBox(doc, yStart - 5, 100);
+    drawBox(doc, yStart - 4, 75); // 🔥 smaller box
 
-    doc.fontSize(13).fillColor("black")
-      .text("Patient Information", 60, yStart);
+    doc.fontSize(11).fillColor("black")
+      .text("Patient Information", 55, yStart);
 
-    doc.moveDown(1);
+    doc.moveDown(0.5);
 
-    doc.fontSize(11)
+    doc.fontSize(10)
       .text(`Name: ${name}`)
       .text(`DOB: ${dob}`)
       .text(`Gender: ${gender}`);
 
-    doc.moveDown(3);
+    doc.moveDown(1.5);
 
     /* ===== TEST BOX ===== */
     yStart = doc.y;
 
-    const testBoxHeight = tests.length * 30 + 60;
-    drawBox(doc, yStart - 5, testBoxHeight);
+    const testBoxHeight = tests.length * 20 + 40; // 🔥 tighter
+    drawBox(doc, yStart - 4, testBoxHeight);
 
-    doc.fontSize(13)
-      .text("Ordered Tests", 60, yStart);
+    doc.fontSize(11)
+      .text("Ordered Tests", 55, yStart);
 
-    doc.moveDown(1);
+    doc.moveDown(0.5);
 
     tests.forEach(t => {
-      doc.fontSize(11)
-        .text(`• ${t.name} (Code: ${t.code})`);
+      doc.fontSize(10)
+        .text(`• ${t.name} (${t.code})`);
 
       if (TEST_INSTRUCTIONS[t.code]) {
         doc.fillColor("#2c7be5")
-          .text(`   ${TEST_INSTRUCTIONS[t.code]}`);
+          .text(`  ${TEST_INSTRUCTIONS[t.code]}`);
         doc.fillColor("black");
       }
 
-      doc.moveDown(1);
+      doc.moveDown(0.4); // 🔥 tighter spacing
     });
 
-    doc.moveDown(3);
+    doc.moveDown(1.5);
 
     /* ===== PROVIDER BOX ===== */
     yStart = doc.y;
-    drawBox(doc, yStart - 5, 110);
-
-    doc.fontSize(13)
-      .text("Ordering Provider", 60, yStart);
-
-    doc.moveDown(1);
+    drawBox(doc, yStart - 4, 85);
 
     doc.fontSize(11)
+      .text("Ordering Provider", 55, yStart);
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(10)
       .text("Dr. Cleberton S. Bastos, DC")
       .text("NPI: 1013268028")
       .text("ProSpine Orlando Chiropractic")
       .text("Quest Account: 11845569");
 
-    doc.moveDown(3);
+    doc.moveDown(1.5);
 
     /* ===== INSTRUCTIONS BOX ===== */
     yStart = doc.y;
-    drawBox(doc, yStart - 5, 100);
-
-    doc.fontSize(13)
-      .text("Instructions", 60, yStart);
-
-    doc.moveDown(1);
+    drawBox(doc, yStart - 4, 75);
 
     doc.fontSize(11)
+      .text("Instructions", 55, yStart);
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(10)
       .text("• Bring a valid photo ID")
       .text("• No payment required at the lab")
       .text("• Follow test-specific instructions above");
