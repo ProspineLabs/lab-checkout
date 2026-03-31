@@ -168,7 +168,7 @@ function generatePDF(name, dob, gender, tests) {
     /* ===============================
        INSTRUCTIONS BOX
     =============================== */
-
+doc.moveDown(4)   /* CSB  
     const instY = doc.y;
 
     doc.fontSize(11)
