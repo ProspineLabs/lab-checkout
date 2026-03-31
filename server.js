@@ -123,7 +123,7 @@ function generatePDF(name, dob, gender, tests) {
     /* ===============================
        TABLE: ORDERED TESTS
     =============================== */
-
+doc.moveDown(3)   /* CSB  */
     const tableStartY = doc.y;
 
     // HEADER
@@ -168,7 +168,7 @@ function generatePDF(name, dob, gender, tests) {
     /* ===============================
        INSTRUCTIONS BOX
     =============================== */
-doc.moveDown(4)   /* CSB  */
+doc.moveDown(3)   /* CSB  */
     const instY = doc.y;
 
     doc.fontSize(11)
