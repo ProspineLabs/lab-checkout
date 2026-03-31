@@ -36,7 +36,9 @@ function drawBox(doc, y, height) {
 /* ==============================
    PDF GENERATOR (FINAL - NO OVERLAP EVER)
 ============================== */
-function generatePDF(name, dob, gender, tests) {
+
+
+ function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
 
     const doc = new PDFDocument({ margin: 50 });
@@ -45,18 +47,31 @@ function generatePDF(name, dob, gender, tests) {
     doc.on("data", buffers.push.bind(buffers));
     doc.on("end", () => resolve(Buffer.concat(buffers)));
 
-    /* ===== LOGO (TRUE CENTER + SAFE) ===== */
-    const logoWidth = 200;
-    const logoHeight = 80;
-    const logoTop = 30;
+    let currentY = 40;
 
+    /* ===== LOGO (DYNAMIC CENTER + HEIGHT SAFE) ===== */
     if (fs.existsSync(LOGO_PATH)) {
-      const centerX = (doc.page.width - logoWidth) / 2;
-      doc.image(LOGO_PATH, centerX, logoTop, { width: logoWidth });
+
+      const image = doc.openImage(LOGO_PATH);
+
+      const maxWidth = 200;
+      const scale = maxWidth / image.width;
+
+      const displayWidth = maxWidth;
+      const displayHeight = image.height * scale;
+
+      const centerX = (doc.page.width - displayWidth) / 2;
+
+      doc.image(LOGO_PATH, centerX, currentY, {
+        width: displayWidth
+      });
+
+      // 🔥 TRUE bottom of logo
+      currentY += displayHeight + 25;
     }
 
-    /* 🔥 CRITICAL: FORCE START BELOW LOGO */
-    doc.y = logoTop + logoHeight + 50;
+    /* ===== FORCE FLOW START ===== */
+    doc.y = currentY;
 
     /* ===== TITLE ===== */
     doc.fontSize(18)
@@ -83,8 +98,8 @@ function generatePDF(name, dob, gender, tests) {
 
     /* ===== TEST BOX ===== */
     yStart = doc.y;
-    const testBoxHeight = tests.length * 30 + 60;
 
+    const testBoxHeight = tests.length * 30 + 60;
     drawBox(doc, yStart - 5, testBoxHeight);
 
     doc.fontSize(13)
@@ -141,19 +156,6 @@ function generatePDF(name, dob, gender, tests) {
     doc.end();
   });
 }
-
-/* ==============================
-   EMAIL TRANSPORT
-============================== */
-const transporter = nodemailer.createTransport({
-  host: "mail.smtp2go.com",
-  port: 2525,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  }
-});
-
 /* ==============================
    WEBHOOK
 ============================== */
