@@ -82,7 +82,7 @@ function generatePDF(name, dob, gender, tests) {
       .fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", { align: "center" });
 
-    doc.moveDown(1);
+    doc.moveDown(2);
 
     /* ===============================
        TWO COLUMN SECTION
