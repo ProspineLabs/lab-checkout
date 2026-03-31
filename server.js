@@ -223,15 +223,7 @@ app.post("/webhook",
     </li>
   `).join("")}
   </ul>
-
-  <h3>Instructions</h3>
-
-  <ul>
-    <li>Bring a valid photo ID</li>
-    <li>No payment required at the lab</li>
-    <li>Follow test-specific preparation instructions above</li>
-  </ul>
-
+  
   <div style="text-align:center; margin-top:25px;">
     <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
       <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br><br>
@@ -241,6 +233,13 @@ app.post("/webhook",
     </a>
   </div>
 
+<h3>Instructions</h3>
+
+  <ul>
+    <li>Bring a valid photo ID</li>
+    <li>No payment required at the lab</li>
+    <li>Follow test-specific preparation instructions above</li>
+  </ul>
 </div>`;
       await transporter.sendMail({
         from: '"ProSpine Orlando" <contact@prospineorlando.com>',
