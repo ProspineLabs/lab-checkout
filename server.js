@@ -27,117 +27,128 @@ const TEST_INSTRUCTIONS = {
    DRAW BOX
 ============================== */
 function drawBox(doc, y, height) {
-  doc.roundedRect(40, y, 520, height, 8)
+  doc.roundedRect(50, y, 500, height, 8)
     .strokeColor("#e0e0e0")
     .lineWidth(1)
     .stroke();
 }
 
 /* ==============================
-   PDF GENERATOR (FINAL)
+   PDF GENERATOR (FINAL FIXED)
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
 
-    const doc = new PDFDocument({ margin: 40 });
+    const doc = new PDFDocument({ margin: 50 });
     const buffers = [];
 
     doc.on("data", buffers.push.bind(buffers));
     doc.on("end", () => resolve(Buffer.concat(buffers)));
 
-    /* ================= HEADER AREA ================= */
-    const HEADER_HEIGHT = 120;
-
+    /* ===== HEADER ===== */
     if (fs.existsSync(LOGO_PATH)) {
-      doc.image(LOGO_PATH, 180, 20, { width: 200 });
+      doc.image(LOGO_PATH, {
+        fit: [200, 80],
+        align: "center"
+      });
     }
-
-    /* Title BELOW header */
-    doc.fontSize(18)
-      .fillColor("#2c7be5")
-      .text("LAB ORDER SUMMARY", 0, HEADER_HEIGHT, { align: "center" });
-
-    /* Force body BELOW header */
-    doc.y = HEADER_HEIGHT + 50;
-
-    let yStart;
-
-    /* ================= PATIENT BOX ================= */
-    yStart = doc.y;
-    drawBox(doc, yStart - 8, 90);
-
-    doc.fontSize(13).fillColor("black")
-      .text("Patient Information", 55, yStart);
-
-    doc.moveDown(0.7);
-
-    doc.fontSize(11)
-      .text(`     Name: ${name}`)
-      .text(`     DOB: ${dob}`)
-      .text(`     Gender: ${gender}`);
 
     doc.moveDown(2);
 
-    /* ================= TEST BOX ================= */
+    doc.fontSize(18)
+      .fillColor("#2c7be5")
+      .text("LAB ORDER SUMMARY", { align: "center" });
+
+    doc.moveDown(2);
+
+    /* ===== PATIENT BOX ===== */
+    let yStart = doc.y;
+    drawBox(doc, yStart - 5, 100);
+
+    doc.fontSize(13).fillColor("black")
+      .text("Patient Information", 60, yStart);
+
+    doc.moveDown(1);
+
+    doc.fontSize(11)
+      .text(`Name: ${name}`)
+      .text(`DOB: ${dob}`)
+      .text(`Gender: ${gender}`);
+
+    doc.moveDown(3);
+
+    /* ===== TEST BOX ===== */
     yStart = doc.y;
 
-    const testBoxHeight = tests.length * 28 + 50;
-    drawBox(doc, yStart - 8, testBoxHeight);
+    const testBoxHeight = tests.length * 30 + 60;
+    drawBox(doc, yStart - 5, testBoxHeight);
 
     doc.fontSize(13)
-      .text("Ordered Tests", 55, yStart);
+      .text("Ordered Tests", 60, yStart);
 
-    doc.moveDown(0.7);
+    doc.moveDown(1);
 
     tests.forEach(t => {
       doc.fontSize(11)
-        .text(`     • ${t.name} (Code: ${t.code})`);
+        .text(`• ${t.name} (Code: ${t.code})`);
 
       if (TEST_INSTRUCTIONS[t.code]) {
         doc.fillColor("#2c7be5")
-          .text(`         - ${TEST_INSTRUCTIONS[t.code]}`);
+          .text(`   ${TEST_INSTRUCTIONS[t.code]}`);
         doc.fillColor("black");
       }
 
-      doc.moveDown(0.7);
+      doc.moveDown(1);
     });
 
-    doc.moveDown(2);
+    doc.moveDown(3);
 
-    /* ================= PROVIDER BOX ================= */
+    /* ===== PROVIDER BOX ===== */
     yStart = doc.y;
-    drawBox(doc, yStart - 8, 100);
+    drawBox(doc, yStart - 5, 110);
 
     doc.fontSize(13)
-      .text("Ordering Provider", 55, yStart);
+      .text("Ordering Provider", 60, yStart);
 
-    doc.moveDown(0.7);
+    doc.moveDown(1);
 
     doc.fontSize(11)
-      .text("     Dr. Cleberton S. Bastos, DC")
-      .text("     NPI: 1013268028")
-      .text("     ProSpine Orlando Chiropractic")
-      .text("     Quest Account: 11845569");
+      .text("Dr. Cleberton S. Bastos, DC")
+      .text("NPI: 1013268028")
+      .text("ProSpine Orlando Chiropractic")
+      .text("Quest Account: 11845569");
 
-    doc.moveDown(2);
+    doc.moveDown(3);
 
-    /* ================= INSTRUCTIONS BOX ================= */
+    /* ===== INSTRUCTIONS BOX ===== */
     yStart = doc.y;
-    drawBox(doc, yStart - 8, 90);
+    drawBox(doc, yStart - 5, 100);
 
     doc.fontSize(13)
-      .text("Instructions", 55, yStart);
+      .text("Instructions", 60, yStart);
 
-    doc.moveDown(0.7);
+    doc.moveDown(1);
 
     doc.fontSize(11)
-      .text("     • Bring a valid photo ID")
-      .text("     • No payment required at the lab")
-      .text("     • Follow test-specific instructions above");
+      .text("• Bring a valid photo ID")
+      .text("• No payment required at the lab")
+      .text("• Follow test-specific instructions above");
 
     doc.end();
   });
 }
+
+/* ==============================
+   EMAIL TRANSPORT
+============================== */
+const transporter = nodemailer.createTransport({
+  host: "mail.smtp2go.com",
+  port: 2525,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
 
 /* ==============================
    WEBHOOK
@@ -154,7 +165,8 @@ app.post("/webhook",
         req.headers["stripe-signature"],
         process.env.STRIPE_WEBHOOK_SECRET
       );
-    } catch {
+    } catch (err) {
+      console.log("Webhook error:", err.message);
       return res.sendStatus(400);
     }
 
@@ -168,12 +180,11 @@ app.post("/webhook",
       const email = s.metadata.email;
       const tests = JSON.parse(s.metadata.tests || "[]");
 
-      const total = tests.reduce((sum, t) => sum + t.price, 0);
-
       const pdf = await generatePDF(name, dob, gender, tests);
 
       const patientHTML = `
       <div style="font-family:Arial; max-width:600px; margin:auto;">
+        
         <div style="text-align:center;">
           <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
         </div>
@@ -190,16 +201,15 @@ app.post("/webhook",
         `).join("")}
         </ul>
 
-        <h3>Total Paid: $${total}</h3>
-
-        <div style="text-align:center;">
-          <a href="https://appointment.questdiagnostics.com/as-home">
-            <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br>
-            <span style="background:#2c7be5;color:white;padding:12px;border-radius:6px;">
+        <div style="text-align:center; margin-top:20px;">
+          <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
+            <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br><br>
+            <span style="background:#2c7be5;color:white;padding:12px 18px;border-radius:6px;">
               Schedule Your Appointment
             </span>
           </a>
         </div>
+
       </div>`;
 
       await transporter.sendMail({
@@ -207,7 +217,10 @@ app.post("/webhook",
         to: email,
         subject: "Your Lab Order",
         html: patientHTML,
-        attachments: [{ filename: "Lab_Order.pdf", content: pdf }]
+        attachments: [{
+          filename: "Lab_Order.pdf",
+          content: pdf
+        }]
       });
     }
 
@@ -216,22 +229,13 @@ app.post("/webhook",
 );
 
 /* ==============================
-   SERVER
+   CREATE CHECKOUT SESSION
 ============================== */
 app.use(express.json());
 
 app.use("/create-checkout-session", cors({
   origin: "https://www.prospineorlando.com"
 }));
-
-const transporter = nodemailer.createTransport({
-  host: "mail.smtp2go.com",
-  port: 2525,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  }
-});
 
 app.post("/create-checkout-session", async (req, res) => {
 
@@ -268,4 +272,7 @@ app.post("/create-checkout-session", async (req, res) => {
   res.json({ url: session.url });
 });
 
-app.listen(3000, () => console.log("Server running"));
+/* ==============================
+   SERVER
+============================== */
+app.listen(3000, () => console.log("🚀 Server running on port 3000"));
