@@ -264,16 +264,50 @@ app.post("/webhook",
     <li>Follow test-specific preparation instructions above</li>
   </ul>
 </div>`;
-      await transporter.sendMail({
-        from: '"ProSpine Orlando" <contact@prospineorlando.com>',
-        to: email,
-        subject: "Your Lab Order",
-        html: patientHTML,
-        attachments: [{
-          filename: "Lab_Order.pdf",
-          content: pdf
-        }]
-      });
+      /* =========================
+   EMAIL TO PATIENT
+========================= */
+await transporter.sendMail({
+  from: '"ProSpine Orlando" <contact@prospineorlando.com>',
+  to: email,
+  subject: "Your Lab Order",
+  html: patientHTML,
+  attachments: [{
+    filename: "Lab_Order.pdf",
+    content: pdf
+  }]
+});
+
+
+/* =========================
+   EMAIL TO CLINIC
+========================= */
+await transporter.sendMail({
+  from: '"Lab Orders" <contact@prospineorlando.com>',
+  to: "contact@prospineorlando.com",
+  subject: `NEW LAB ORDER - ${name}`,
+  html: `
+  <div style="font-family:Arial;">
+    <h2>New Lab Order Submitted</h2>
+
+    <p><strong>Name:</strong> ${name}</p>
+    <p><strong>DOB:</strong> ${dob}</p>
+    <p><strong>Gender:</strong> ${gender}</p>
+    <p><strong>Email:</strong> ${email}</p>
+
+    <h3>Tests Ordered:</h3>
+    <ul>
+      ${tests.map(t => `
+        <li>${t.name} (${t.code})</li>
+      `).join("")}
+    </ul>
+  </div>
+  `,
+  attachments: [{
+    filename: "Lab_Order.pdf",
+    content: pdf
+  }]
+});
     }
 
     res.sendStatus(200);
