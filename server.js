@@ -56,7 +56,7 @@ function generatePDF(name, dob, gender, tests) {
     }
 
     /* 🔥 CRITICAL: FORCE START BELOW LOGO */
-    doc.y = logoTop + logoHeight + 30;
+    doc.y = logoTop + logoHeight + 50;
 
     /* ===== TITLE ===== */
     doc.fontSize(18)
