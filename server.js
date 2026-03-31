@@ -34,7 +34,7 @@ function drawBox(doc, y, height) {
 }
 
 /* ==============================
-   PDF GENERATOR (FINAL FIXED)
+   PDF GENERATOR (FINAL FINAL)
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
@@ -45,16 +45,18 @@ function generatePDF(name, dob, gender, tests) {
     doc.on("data", buffers.push.bind(buffers));
     doc.on("end", () => resolve(Buffer.concat(buffers)));
 
-    /* ===== HEADER ===== */
+    /* ===== LOGO (TRUE CENTER) ===== */
     if (fs.existsSync(LOGO_PATH)) {
-      doc.image(LOGO_PATH, {
-        fit: [200, 80],
-        align: "center"
-      });
+      const logoWidth = 200;
+      const pageWidth = doc.page.width;
+      const centerX = (pageWidth - logoWidth) / 2;
+
+      doc.image(LOGO_PATH, centerX, 30, { width: logoWidth });
     }
 
-    doc.moveDown(2);
+    doc.moveDown(5); // pushes content BELOW logo safely
 
+    /* ===== TITLE ===== */
     doc.fontSize(18)
       .fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", { align: "center" });
@@ -184,7 +186,6 @@ app.post("/webhook",
 
       const patientHTML = `
       <div style="font-family:Arial; max-width:600px; margin:auto;">
-        
         <div style="text-align:center;">
           <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
         </div>
@@ -202,14 +203,13 @@ app.post("/webhook",
         </ul>
 
         <div style="text-align:center; margin-top:20px;">
-          <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
+          <a href="https://appointment.questdiagnostics.com/as-home">
             <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br><br>
             <span style="background:#2c7be5;color:white;padding:12px 18px;border-radius:6px;">
               Schedule Your Appointment
             </span>
           </a>
         </div>
-
       </div>`;
 
       await transporter.sendMail({
@@ -217,10 +217,7 @@ app.post("/webhook",
         to: email,
         subject: "Your Lab Order",
         html: patientHTML,
-        attachments: [{
-          filename: "Lab_Order.pdf",
-          content: pdf
-        }]
+        attachments: [{ filename: "Lab_Order.pdf", content: pdf }]
       });
     }
 
@@ -229,7 +226,7 @@ app.post("/webhook",
 );
 
 /* ==============================
-   CREATE CHECKOUT SESSION
+   CHECKOUT
 ============================== */
 app.use(express.json());
 
@@ -275,4 +272,4 @@ app.post("/create-checkout-session", async (req, res) => {
 /* ==============================
    SERVER
 ============================== */
-app.listen(3000, () => console.log("🚀 Server running on port 3000"));
+app.listen(3000, () => console.log("🚀 Server running"));
