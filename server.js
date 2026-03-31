@@ -12,7 +12,7 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 const LOGO_PATH = path.join(__dirname, "logo.png");
 
-/* ==============================
+/* ===============================
    EMAIL TRANSPORT (FIXED POSITION)
 ============================== */
 const transporter = nodemailer.createTransport({
