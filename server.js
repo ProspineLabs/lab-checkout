@@ -13,6 +13,18 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const LOGO_PATH = path.join(__dirname, "logo.png");
 
 /* ==============================
+   EMAIL TRANSPORT (FIXED POSITION)
+============================== */
+const transporter = nodemailer.createTransport({
+  host: "mail.smtp2go.com",
+  port: 2525,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
+
+/* ==============================
    TEST INSTRUCTIONS
 ============================== */
 const TEST_INSTRUCTIONS = {
@@ -34,11 +46,9 @@ function drawBox(doc, y, height) {
 }
 
 /* ==============================
-   PDF GENERATOR (FINAL - NO OVERLAP EVER)
+   PDF GENERATOR (FINAL — NO OVERLAP EVER)
 ============================== */
-
-
- function generatePDF(name, dob, gender, tests) {
+function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
 
     const doc = new PDFDocument({ margin: 50 });
@@ -49,7 +59,7 @@ function drawBox(doc, y, height) {
 
     let currentY = 40;
 
-    /* ===== LOGO (DYNAMIC CENTER + HEIGHT SAFE) ===== */
+    /* ===== LOGO (DYNAMIC CENTER) ===== */
     if (fs.existsSync(LOGO_PATH)) {
 
       const image = doc.openImage(LOGO_PATH);
@@ -66,11 +76,10 @@ function drawBox(doc, y, height) {
         width: displayWidth
       });
 
-      // 🔥 TRUE bottom of logo
       currentY += displayHeight + 25;
     }
 
-    /* ===== FORCE FLOW START ===== */
+    /* ===== FORCE CONTENT BELOW LOGO ===== */
     doc.y = currentY;
 
     /* ===== TITLE ===== */
@@ -156,6 +165,7 @@ function drawBox(doc, y, height) {
     doc.end();
   });
 }
+
 /* ==============================
    WEBHOOK
 ============================== */
