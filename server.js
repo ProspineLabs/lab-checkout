@@ -272,15 +272,7 @@ app.post("/webhook",
     Payment collected is for coordination and administrative services.
   </div>
 
-  <div style="text-align:center; margin-top:25px;">
-    <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
-      <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br><br>
-      <span style="background:#2c7be5;color:white;padding:12px 18px;border-radius:6px;">
-        Schedule Your Appointment
-      </span>
-    </a>
-  </div>
-  
+   
 </div>`;
       /* =========================
    EMAIL TO PATIENT
