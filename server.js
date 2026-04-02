@@ -263,6 +263,24 @@ app.post("/webhook",
     <li>No payment required at the lab</li>
     <li>Follow test-specific preparation instructions above</li>
   </ul>
+
+  <div style="font-size:12px; color:#555; margin-top:20px; padding-top:10px; border-top:1px solid #ddd;">
+    <strong>Important:</strong><br>
+    ProSpine Orlando facilitates laboratory testing services for your convenience. 
+    All laboratory testing is performed by a third-party CLIA-certified laboratory (Quest Diagnostics). 
+    ProSpine Orlando is not a laboratory and does not perform or analyze lab tests. 
+    Payment collected is for coordination and administrative services.
+  </div>
+
+  <div style="text-align:center; margin-top:25px;">
+    <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
+      <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br><br>
+      <span style="background:#2c7be5;color:white;padding:12px 18px;border-radius:6px;">
+        Schedule Your Appointment
+      </span>
+    </a>
+  </div>
+  
 </div>`;
       /* =========================
    EMAIL TO PATIENT
