@@ -218,7 +218,7 @@ app.post("/webhook",
       const gender = s.metadata.gender;
       const email = s.metadata.email;
       const tests = JSON.parse(s.metadata.tests || "[]");
-      const total = tests.reduce((sum, t) => sum + (t.price || 0), 0);
+      const total = tests.reduce((sum, t) => sum + Number(t.price || 0), 0);
        
       const pdf = await generatePDF(name, dob, gender, tests);
 
