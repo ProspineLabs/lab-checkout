@@ -305,11 +305,11 @@ await transporter.sendMail({
     <p><strong>DOB:</strong> ${dob}</p>
     <p><strong>Gender:</strong> ${gender}</p>
     <p><strong>Email:</strong> ${email}</p>
-
+<p><strong>Total Paid:</strong> $${total.toFixed(2)}</p>
     <h3>Tests Ordered:</h3>
     <ul>
       ${tests.map(t => `
-        <li>${t.name} (${t.code})</li>
+        <li>${t.name} (${t.code}) - $${t.price}</li>
       `).join("")}
     </ul>
   </div>
