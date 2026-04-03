@@ -198,11 +198,9 @@ app.post("/webhook",
         code: item.description.match(/\((\d+)\)/)?.[1] || ""
       }));
 
-      const total = tests.reduce((sum, t) => sum + t.price, 0);
-
       const pdf = await generatePDF(name, dob, gender, tests);
 
-      /* YOUR EMAIL LOGIC HERE */
+      /* KEEP YOUR EMAIL LOGIC HERE */
     }
 
     res.sendStatus(200);
@@ -210,7 +208,7 @@ app.post("/webhook",
 );
 
 /* ==============================
-   CHECKOUT (FIXED)
+   CHECKOUT (FULLY FIXED)
 ============================== */
 app.use(express.json());
 
@@ -219,11 +217,22 @@ app.post("/create-checkout-session", async (req, res) => {
 
     const { name, dob, email, phone, gender, tests } = req.body;
 
-    const clean = tests.map(t => ({
-      name: t.name,
-      price: Number(t.price),
-      code: t.code || ""
-    }));
+    console.log("INCOMING:", tests);
+
+    const clean = tests
+      .filter(t => t && t.name && t.price !== undefined)
+      .map(t => ({
+        name: String(t.name),
+        price: Number(t.price),
+        code: t.code || ""
+      }))
+      .filter(t => !isNaN(t.price) && t.price > 0);
+
+    console.log("CLEAN:", clean);
+
+    if (clean.length === 0) {
+      return res.status(400).json({ error: "Invalid test data" });
+    }
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
