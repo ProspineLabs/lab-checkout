@@ -215,9 +215,15 @@ app.use(express.json());
 app.post("/create-checkout-session", async (req, res) => {
   try {
 
-    const { name, dob, email, phone, gender, tests } = req.body;
+    console.log("BODY RECEIVED:", req.body);
 
-    console.log("INCOMING:", tests);
+    const { name, dob, email, phone, gender, tests } = req.body || {};
+
+    // 🔥 HARD PROTECTION
+    if (!tests || !Array.isArray(tests)) {
+      console.log("❌ INVALID TESTS:", tests);
+      return res.status(400).json({ error: "Tests not valid array" });
+    }
 
     const clean = tests
       .filter(t => t && t.name && t.price !== undefined)
@@ -231,7 +237,7 @@ app.post("/create-checkout-session", async (req, res) => {
     console.log("CLEAN:", clean);
 
     if (clean.length === 0) {
-      return res.status(400).json({ error: "Invalid test data" });
+      return res.status(400).json({ error: "No valid tests" });
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -258,7 +264,7 @@ app.post("/create-checkout-session", async (req, res) => {
     res.json({ url: session.url });
 
   } catch (err) {
-    console.error("🔥 STRIPE ERROR:", err);
+    console.error("🔥 SERVER CRASH:", err);
     res.status(500).json({ error: err.message });
   }
 });
