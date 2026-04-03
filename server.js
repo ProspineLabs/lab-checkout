@@ -31,20 +31,17 @@ const transporter = nodemailer.createTransport({
 
 /* TEST INSTRUCTIONS */
 const TEST_INSTRUCTIONS = {
-  "5363": "Avoid ejaculation and intense exercise for 48 hours before test",
-  "7600": "Fasting 9–12 hours required",
-  "561": "Fasting recommended"
+  "7600": "Fasting 9–12 hours required"
 };
 
 /* ==============================
-   PDF (FIXED)
+   PDF (FULL FIX)
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
 
     const doc = new PDFDocument({ margin: 40 });
     const buffers = [];
-
     doc.on("data", buffers.push.bind(buffers));
     doc.on("end", () => resolve(Buffer.concat(buffers)));
 
@@ -62,68 +59,64 @@ function generatePDF(name, dob, gender, tests) {
 
     doc.moveDown(2);
 
-    const startY = doc.y;
-
-    doc.roundedRect(45, startY - 5, 500, 80, 6).stroke("#e0e0e0");
-
     doc.fontSize(10).fillColor("black")
-      .text(`Name: ${name}`, 50, startY + 15)
-      .text(`DOB: ${dob}`, 50, startY + 30)
-      .text(`Gender: ${gender}`, 50, startY + 45);
+      .text(`Name: ${name}`)
+      .text(`DOB: ${dob}`)
+      .text(`Gender: ${gender}`)
+      .moveDown();
 
-    doc.text("Dr. Cleberton S. Bastos, DC", 300, startY + 15)
-      .text("ProSpine Orlando Chiropractic", 300, startY + 30);
+    doc.text("Dr. Cleberton S. Bastos, DC")
+      .text("ProSpine Orlando Chiropractic")
+      .moveDown(2);
 
-    doc.y = startY + 100;
+    /* TABLE HEADER */
+    doc.fontSize(11).text("Ordered Tests");
 
-    doc.text("Ordered Tests", 50);
+    const startY = doc.y + 10;
 
-    let rowY = doc.y + 10;
+    const col1 = 50;
+    const col2 = 330;
+    const col3 = 400;
+
+    doc.fontSize(10).fillColor("black");
+    doc.text("Test Name", col1, startY);
+    doc.text("Code", col2, startY);
+    doc.text("Instructions", col3, startY);
+
+    let rowY = startY + 15;
 
     tests.forEach((t, i) => {
+
+      const rowHeight = doc.heightOfString(t.name, { width: 260 }) + 10;
+
       if (i % 2 === 0) {
-        doc.rect(50, rowY - 2, 500, 18).fill("#f9f9f9").fillColor("black");
+        doc.rect(45, rowY - 2, 500, rowHeight).fill("#f5f7fa").fillColor("black");
       }
 
-      doc.text(t.name, 50, rowY, { width: 280 })
-        .text(t.code || "-", 350, rowY)
-        .text(TEST_INSTRUCTIONS[t.code] || "-", 420, rowY, { width: 120 });
+      doc.text(t.name, col1, rowY, { width: 260 });
+      doc.text(t.code || "-", col2, rowY);
+      doc.text(TEST_INSTRUCTIONS[t.code] || "-", col3, rowY, { width: 120 });
 
-      rowY += 18;
+      rowY += rowHeight;
     });
 
-    /* =========================
-       FIXED INSTRUCTIONS BOX
-    ========================= */
+    /* INSTRUCTIONS BOX */
     doc.y = rowY + 10;
 
-    const instructions = [
-      "• Bring a valid photo ID",
-      "• No payment required at the lab",
-      "• Follow preparation instructions above"
-    ];
+    doc.rect(45, doc.y, 500, 60).stroke("#e0e0e0");
 
-    const boxHeight = instructions.length * 14 + 30;
+    doc.text("Instructions", 50, doc.y + 10);
 
-    doc.roundedRect(45, doc.y, 500, boxHeight, 6).stroke("#e0e0e0");
+    doc.text("• Bring a valid photo ID", 50, doc.y + 25)
+      .text("• No payment required at the lab", 50, doc.y + 38)
+      .text("• Follow preparation instructions above", 50, doc.y + 51);
 
-    doc.fontSize(11).text("Instructions", 50, doc.y + 10);
+    /* DISCLAIMER */
+    doc.y += 80;
 
-    let textY = doc.y + 25;
+    doc.rect(45, doc.y, 500, 80).stroke("#e0e0e0");
 
-    instructions.forEach(line => {
-      doc.fontSize(10).text(line, 50, textY);
-      textY += 14;
-    });
-
-    /* =========================
-       IMPORTANT DISCLAIMER
-    ========================= */
-    doc.y = textY + 20;
-
-    doc.roundedRect(45, doc.y, 500, 80, 6).stroke("#e0e0e0");
-
-    doc.fontSize(10).fillColor("black")
+    doc.fontSize(9)
       .text(
         "IMPORTANT:\nProSpine Orlando facilitates laboratory testing services for your convenience. All laboratory testing is performed by a third-party CLIA-certified laboratory (Quest Diagnostics). ProSpine Orlando is not a laboratory and does not perform or analyze lab tests. Payment collected is for coordination and administrative services.",
         50,
@@ -136,7 +129,7 @@ function generatePDF(name, dob, gender, tests) {
 }
 
 /* ==============================
-   WEBHOOK
+   WEBHOOK (EMAIL FIXED)
 ============================== */
 app.post("/webhook",
   bodyParser.raw({ type: "application/json" }),
@@ -174,10 +167,11 @@ app.post("/webhook",
       const rows = tests.map(t => `
         <tr>
           <td style="padding:8px;border-bottom:1px solid #eee;">${t.name}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee;">${t.code}</td>
+          <td style="padding:8px;border-bottom:1px solid #eee;">$${t.price.toFixed(2)}</td>
         </tr>
       `).join("");
 
+      /* PATIENT EMAIL */
       await transporter.sendMail({
         from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
         to: email,
@@ -188,7 +182,7 @@ app.post("/webhook",
             <img src="https://www.prospineorlando.com/images/logo-5-stars.png" width="180"/>
           </div>
 
-          <h2 style="text-align:center;color:#2c7be5;">Lab Order Confirmed</h2>
+          <h2 style="text-align:center;">Lab Order Confirmed</h2>
 
           <table style="width:100%;border-collapse:collapse;">
             ${rows}
@@ -205,26 +199,31 @@ app.post("/webhook",
             </a>
           </div>
 
-          <p style="font-size:12px;color:#555;">
-          <strong>Important:</strong><br/>
-          ProSpine Orlando facilitates laboratory testing services for your convenience. 
-          All laboratory testing is performed by a third-party CLIA-certified laboratory (Quest Diagnostics). 
-          ProSpine Orlando is not a laboratory and does not perform or analyze lab tests. 
-          Payment collected is for coordination and administrative services.
+          <p style="font-size:12px;">
+          IMPORTANT: ProSpine Orlando facilitates laboratory testing services...
           </p>
-
         </div>
         `,
         attachments: [{ filename: "Lab_Order.pdf", content: pdf }]
       });
 
+      /* CLINIC EMAIL (FORMATTED) */
       await transporter.sendMail({
         from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
         to: process.env.SMTP_USER,
         subject: "New Lab Order",
         html: `
-          ${tests.map(t => `• ${t.name} $${t.price}`).join("<br>")}
-          <br><br><strong>Total: $${total.toFixed(2)}</strong>
+        <div style="font-family:Arial;">
+          <h3>New Lab Order</h3>
+          <strong>${name}</strong><br/>
+          ${email}<br/><br/>
+
+          <table style="width:100%;border-collapse:collapse;">
+            ${rows}
+          </table>
+
+          <h3>Total: $${total.toFixed(2)}</h3>
+        </div>
         `
       });
     }
