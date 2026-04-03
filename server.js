@@ -9,10 +9,7 @@ const app = express();
 // =========================
 // ✅ BASIC SAFETY CHECK
 // =========================
-if (!process.env.STRIPE_SECRET_KEY) {
-  console.error("❌ STRIPE_SECRET_KEY is missing!");
-  process.exit(1);
-}
+
 
 // =========================
 // ✅ CORS (OPEN FOR TESTING)
