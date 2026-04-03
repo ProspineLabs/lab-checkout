@@ -202,7 +202,7 @@ app.post("/webhook",
 
       const pdf = await generatePDF(name, dob, gender, tests);
 
-      /* YOUR ORIGINAL EMAILS REMAIN HERE (UNCHANGED) */
+      /* YOUR EMAIL LOGIC HERE */
     }
 
     res.sendStatus(200);
@@ -210,7 +210,7 @@ app.post("/webhook",
 );
 
 /* ==============================
-   CHECKOUT (ONLY FIX APPLIED HERE)
+   CHECKOUT (FIXED)
 ============================== */
 app.use(express.json());
 
@@ -219,15 +219,11 @@ app.post("/create-checkout-session", async (req, res) => {
 
     const { name, dob, email, phone, gender, tests } = req.body;
 
-    console.log("INCOMING TESTS:", tests);
-
     const clean = tests.map(t => ({
       name: t.name,
       price: Number(t.price),
       code: t.code || ""
     }));
-
-    console.log("CLEAN TESTS:", clean);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -256,9 +252,6 @@ app.post("/create-checkout-session", async (req, res) => {
     console.error("🔥 STRIPE ERROR:", err);
     res.status(500).json({ error: err.message });
   }
-});
-
-  res.json({ url: session.url });
 });
 
 /* ==============================
