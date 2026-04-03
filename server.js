@@ -210,6 +210,16 @@ app.post("/webhook",
 /* ==============================
    CHECKOUT (FULLY FIXED)
 ============================== */
+const cors = require("cors");
+
+app.use(cors({
+  origin: "https://www.prospineorlando.com",
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
+}));
+
+app.options("*", cors());
+
 app.use(express.json());
 
 app.post("/create-checkout-session", async (req, res) => {
