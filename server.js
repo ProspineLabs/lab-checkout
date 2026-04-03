@@ -215,36 +215,48 @@ app.post("/webhook",
 app.use(express.json());
 
 app.post("/create-checkout-session", async (req, res) => {
+  try {
 
-  const { name, dob, email, phone, gender, tests } = req.body;
+    const { name, dob, email, phone, gender, tests } = req.body;
 
-  /* 🔥 FIXED CLEAN OBJECT */
-  const clean = tests.map(t => ({
-    name: t.name,
-    price: Number(t.price),
-    code: t.code || ""
-  }));
+    console.log("INCOMING TESTS:", tests);
 
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ["card"],
-    mode: "payment",
+    const clean = tests.map(t => ({
+      name: t.name,
+      price: Number(t.price),
+      code: t.code || ""
+    }));
 
-    line_items: clean.map(t => ({
-      price_data: {
-        currency: "usd",
-        product_data: {
-          name: t.code ? `${t.name} (${t.code})` : t.name
+    console.log("CLEAN TESTS:", clean);
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
+
+      line_items: clean.map(t => ({
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: t.code ? `${t.name} (${t.code})` : t.name
+          },
+          unit_amount: Math.round(t.price * 100)
         },
-        unit_amount: Math.round(t.price * 100)
-      },
-      quantity: 1
-    })),
+        quantity: 1
+      })),
 
-    success_url: "https://www.prospineorlando.com/success/index.html",
-    cancel_url: "https://www.prospineorlando.com/cancel/index.html",
+      success_url: "https://www.prospineorlando.com/success/index.html",
+      cancel_url: "https://www.prospineorlando.com/cancel/index.html",
 
-    metadata: { name, dob, gender, email, phone }
-  });
+      metadata: { name, dob, gender, email, phone }
+    });
+
+    res.json({ url: session.url });
+
+  } catch (err) {
+    console.error("🔥 STRIPE ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
   res.json({ url: session.url });
 });
