@@ -13,6 +13,19 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const LOGO_PATH = path.join(__dirname, "logo.png");
 
 /* ===============================
+   SAFE NAME (STRIPE LIMIT FIX)
+============================== */
+function safeName(name, code) {
+  let full = code ? `${name} (${code})` : name;
+
+  if (full.length > 100) {
+    full = full.substring(0, 97) + "...";
+  }
+
+  return full;
+}
+
+/* ===============================
    EMAIL TRANSPORT
 ============================== */
 const transporter = nodemailer.createTransport({
@@ -36,7 +49,7 @@ const TEST_INSTRUCTIONS = {
 };
 
 /* ==============================
-   PDF GENERATOR (STYLED)
+   PDF GENERATOR
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
@@ -49,7 +62,6 @@ function generatePDF(name, dob, gender, tests) {
 
     let currentY = 25;
 
-    // LOGO
     if (fs.existsSync(LOGO_PATH)) {
       const image = doc.openImage(LOGO_PATH);
       const maxWidth = 140;
@@ -59,8 +71,7 @@ function generatePDF(name, dob, gender, tests) {
       const centerX = (doc.page.width - maxWidth) / 2;
 
       doc.image(LOGO_PATH, centerX, currentY, { width: maxWidth });
-
-      currentY += displayHeight + 20; // spacing FIX
+      currentY += displayHeight + 20;
     }
 
     doc.y = currentY;
@@ -73,13 +84,11 @@ function generatePDF(name, dob, gender, tests) {
 
     const startY = doc.y;
 
-    // PATIENT BOX
     doc.roundedRect(45, startY - 5, 500, 80, 6)
       .strokeColor("#dfe3e8")
       .stroke();
 
-    doc.fontSize(11).fillColor("black")
-      .text("Patient Information", 50, startY);
+    doc.fontSize(11).text("Patient Information", 50, startY);
 
     doc.fontSize(10)
       .text(`Name: ${name}`, 50, startY + 15)
@@ -98,7 +107,6 @@ function generatePDF(name, dob, gender, tests) {
     let rowY = doc.y + 10;
 
     tests.forEach((t, i) => {
-
       const isEven = i % 2 === 0;
 
       doc.rect(50, rowY - 2, 500, 20)
@@ -113,26 +121,12 @@ function generatePDF(name, dob, gender, tests) {
       rowY += 20;
     });
 
-    doc.moveDown(2);
-
-    doc.roundedRect(45, rowY + 10, 500, 60, 6)
-      .strokeColor("#dfe3e8")
-      .stroke();
-
-    doc.fontSize(11)
-      .text("Instructions", 50, rowY + 15);
-
-    doc.fontSize(10)
-      .text("• Bring a valid photo ID", 50, rowY + 30)
-      .text("• No payment required at the lab", 50, rowY + 45)
-      .text("• Follow preparation instructions above", 50, rowY + 60);
-
     doc.end();
   });
 }
 
 /* ==============================
-   WEBHOOK (STYLED EMAIL)
+   WEBHOOK (EMAILS)
 ============================== */
 app.post("/webhook",
   bodyParser.raw({ type: "application/json" }),
@@ -154,7 +148,6 @@ app.post("/webhook",
     if (event.type === "checkout.session.completed") {
 
       const s = event.data.object;
-
       const { name, dob, gender, email } = s.metadata;
 
       const lineItems = await stripe.checkout.sessions.listLineItems(s.id);
@@ -165,66 +158,77 @@ app.post("/webhook",
         code: item.description.match(/\((\d+)\)/)?.[1] || ""
       }));
 
+      const totalAmount = lineItems.data.reduce((sum, item) => {
+        return sum + item.amount_total;
+      }, 0) / 100;
+
       const pdf = await generatePDF(name, dob, gender, tests);
 
-      /* ===============================
-         PATIENT EMAIL (STYLED)
-      =============================== */
+      const testRows = tests.map(t => `
+        <tr>
+          <td style="padding:10px;border-bottom:1px solid #eee;">${t.name}</td>
+          <td style="padding:10px;border-bottom:1px solid #eee;">${t.code || "-"}</td>
+        </tr>
+      `).join("");
+
+      /* PATIENT EMAIL */
       await transporter.sendMail({
         from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
         to: email,
-        subject: "Your Lab Order – ProSpine Orlando",
+        subject: "Your Lab Order Confirmation",
         html: `
-        <div style="font-family: Arial; max-width:600px; margin:auto;">
-          <div style="text-align:center; padding:20px;">
-            <img src="https://www.prospineorlando.com/exams/logo.png" width="180"/>
+        <div style="font-family:Arial;max-width:600px;margin:auto;">
+          <div style="text-align:center;padding:20px;">
+            <img src="https://www.prospineorlando.com/exams/logo.png" width="200"/>
           </div>
 
-          <h2 style="color:#2c7be5;">Your Order is Confirmed</h2>
+          <h2 style="color:#2c7be5;text-align:center;">Lab Order Confirmed</h2>
 
-          <p>Thank you for your order. Your lab request has been successfully processed.</p>
+          <p>Hello ${name},</p>
 
-          <div style="background:#f4f8fb; padding:15px; border-radius:8px;">
-            <strong>Important:</strong><br/>
-            • Bring a valid photo ID<br/>
-            • No payment required at Quest<br/>
-            • Follow test preparation instructions
+          <table style="width:100%;border-collapse:collapse;margin-top:15px;">
+            <thead style="background:#f4f8fb;">
+              <tr>
+                <th style="padding:10px;text-align:left;">Test</th>
+                <th style="padding:10px;text-align:left;">Code</th>
+              </tr>
+            </thead>
+            <tbody>${testRows}</tbody>
+          </table>
+
+          <div style="margin-top:20px;padding:15px;background:#f4f8fb;border-radius:8px;">
+            • Bring ID<br/>
+            • No payment needed at lab<br/>
+            • Follow prep instructions
           </div>
 
-          <div style="text-align:center; margin:30px;">
+          <div style="text-align:center;margin:30px;">
             <a href="https://appointment.questdiagnostics.com/as-home"
-              style="background:#2c7be5; color:white; padding:12px 25px; text-decoration:none; border-radius:6px;">
-              Schedule Your Appointment
+              style="background:#2c7be5;color:white;padding:14px 25px;text-decoration:none;border-radius:6px;">
+              Schedule Appointment
             </a>
           </div>
-
-          <p style="font-size:12px; color:#666;">
-            Your lab order is attached as a PDF.
-          </p>
         </div>
         `,
-        attachments: [{
-          filename: "Lab_Order.pdf",
-          content: pdf
-        }]
+        attachments: [{ filename: "Lab_Order.pdf", content: pdf }]
       });
 
-      /* ===============================
-         CLINIC EMAIL
-      =============================== */
+      /* CLINIC EMAIL */
       await transporter.sendMail({
         from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
         to: process.env.SMTP_USER,
         subject: "New Lab Order",
         html: `
-          <strong>New Order Received</strong><br/>
+          <strong>New Lab Order</strong><br/><br/>
           Name: ${name}<br/>
-          Email: ${email}<br/>
-          Tests: ${tests.map(t => t.name).join(", ")}
+          Email: ${email}<br/><br/>
+          ${tests.map(t => `• ${t.name} — $${t.price.toFixed(2)}`).join("<br/>")}
+          <br/><br/>
+          <strong>Total Paid: $${totalAmount.toFixed(2)}</strong>
         `
       });
 
-      console.log("✅ Emails sent");
+      console.log("✅ Emails sent with total");
     }
 
     res.sendStatus(200);
@@ -232,7 +236,7 @@ app.post("/webhook",
 );
 
 /* ==============================
-   CORS (UNCHANGED)
+   CORS
 ============================== */
 app.use(cors({
   origin: "https://www.prospineorlando.com",
@@ -245,7 +249,7 @@ app.options("*", cors());
 app.use(express.json());
 
 /* ==============================
-   CHECKOUT (UNCHANGED)
+   CHECKOUT
 ============================== */
 app.post("/create-checkout-session", async (req, res) => {
   try {
@@ -273,7 +277,7 @@ app.post("/create-checkout-session", async (req, res) => {
         price_data: {
           currency: "usd",
           product_data: {
-            name: t.code ? `${t.name} (${t.code})` : t.name
+            name: safeName(t.name, t.code)
           },
           unit_amount: Math.round(t.price * 100)
         },
