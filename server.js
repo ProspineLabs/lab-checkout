@@ -2,7 +2,7 @@ const express = require("express");
 const Stripe = require("stripe");
 const nodemailer = require("nodemailer");
 const bodyParser = require("body-parser");
-const cors = require("cors"); // ✅ KEEP ONLY THIS ONE
+const cors = require("cors");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
@@ -36,7 +36,7 @@ const TEST_INSTRUCTIONS = {
 };
 
 /* ==============================
-   PDF GENERATOR (UNCHANGED)
+   PDF GENERATOR (STYLED)
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
@@ -49,119 +49,90 @@ function generatePDF(name, dob, gender, tests) {
 
     let currentY = 25;
 
+    // LOGO
     if (fs.existsSync(LOGO_PATH)) {
       const image = doc.openImage(LOGO_PATH);
-      const maxWidth = 130;
+      const maxWidth = 140;
       const scale = maxWidth / image.width;
 
-      const displayWidth = maxWidth;
       const displayHeight = image.height * scale;
+      const centerX = (doc.page.width - maxWidth) / 2;
 
-      const centerX = (doc.page.width - displayWidth) / 2;
+      doc.image(LOGO_PATH, centerX, currentY, { width: maxWidth });
 
-      doc.image(LOGO_PATH, centerX, currentY, { width: displayWidth });
-
-      currentY += displayHeight + 8;
+      currentY += displayHeight + 20; // spacing FIX
     }
 
     doc.y = currentY;
 
-    doc.fontSize(14)
+    doc.fontSize(16)
       .fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", { align: "center" });
 
     doc.moveDown(2);
 
     const startY = doc.y;
-    const leftX = 50;
-    const rightX = 300;
+
+    // PATIENT BOX
+    doc.roundedRect(45, startY - 5, 500, 80, 6)
+      .strokeColor("#dfe3e8")
+      .stroke();
 
     doc.fontSize(11).fillColor("black")
-      .text("Patient Information", leftX, startY);
+      .text("Patient Information", 50, startY);
 
     doc.fontSize(10)
-      .text(`Name: ${name}`, leftX, startY + 15)
-      .text(`DOB: ${dob}`, leftX, startY + 30)
-      .text(`Gender: ${gender}`, leftX, startY + 45);
+      .text(`Name: ${name}`, 50, startY + 15)
+      .text(`DOB: ${dob}`, 50, startY + 30)
+      .text(`Gender: ${gender}`, 50, startY + 45);
 
-    doc.fontSize(11)
-      .text("Ordering Provider", rightX, startY);
+    doc.text("Ordering Provider", 300, startY)
+      .text("Dr. Cleberton S. Bastos, DC", 300, startY + 15)
+      .text("ProSpine Orlando Chiropractic", 300, startY + 30)
+      .text("Quest Account: 11845569", 300, startY + 45);
 
-    doc.fontSize(10)
-      .text("Dr. Cleberton S. Bastos, DC", rightX, startY + 15)
-      .text("NPI: 1013268028", rightX, startY + 30)
-      .text("ProSpine Orlando Chiropractic", rightX, startY + 45)
-      .text("Quest Account: 11845569", rightX, startY + 60);
+    doc.y = startY + 100;
 
-    const boxHeight = 80;
-    doc.roundedRect(45, startY - 5, 500, boxHeight, 6)
-      .strokeColor("#e0e0e0")
-      .lineWidth(1)
-      .stroke();
+    doc.fontSize(12).text("Ordered Tests", 50);
 
-    doc.y = startY + boxHeight + 10;
-
-    doc.moveDown(3);
-
-    const tableStartY = doc.y;
-
-    doc.fontSize(11)
-      .text("Ordered Tests", 50, tableStartY);
-
-    const tableTop = tableStartY + 15;
-
-    doc.fontSize(10).fillColor("black");
-    doc.text("Test Name", 50, tableTop);
-    doc.text("Code", 350, tableTop);
-    doc.text("Instructions", 420, tableTop);
-
-    doc.moveTo(50, tableTop + 12)
-      .lineTo(550, tableTop + 12)
-      .strokeColor("#cccccc")
-      .stroke();
-
-    let rowY = tableTop + 18;
+    let rowY = doc.y + 10;
 
     tests.forEach((t, i) => {
-      if (i % 2 === 0) {
-        doc.rect(50, rowY - 2, 500, 16)
-          .fill("#f9f9f9")
-          .fillColor("black");
-      }
+
+      const isEven = i % 2 === 0;
+
+      doc.rect(50, rowY - 2, 500, 20)
+        .fill(isEven ? "#f4f8fb" : "#ffffff")
+        .fillColor("black");
 
       doc.fontSize(10)
-        .text(t.name, 50, rowY, { width: 290 })
+        .text(t.name, 55, rowY)
         .text(t.code || "-", 350, rowY)
         .text(TEST_INSTRUCTIONS[t.code] || "-", 420, rowY, { width: 120 });
 
-      rowY += 16;
+      rowY += 20;
     });
 
-    doc.y = rowY + 10;
+    doc.moveDown(2);
 
-    doc.moveDown(3);
-
-    const instY = doc.y;
+    doc.roundedRect(45, rowY + 10, 500, 60, 6)
+      .strokeColor("#dfe3e8")
+      .stroke();
 
     doc.fontSize(11)
-      .text("Instructions", 50, instY);
+      .text("Instructions", 50, rowY + 15);
 
     doc.fontSize(10)
-      .text("• Bring a valid photo ID", 50, instY + 15)
-      .text("• No payment required at the lab", 50, instY + 28)
-      .text("• Follow test-specific preparation above", 50, instY + 41);
-
-    doc.roundedRect(45, instY - 5, 500, 65, 6)
-      .strokeColor("#e0e0e0")
-      .lineWidth(1)
-      .stroke();
+      .text("• Bring a valid photo ID", 50, rowY + 30)
+      .text("• No payment required at the lab", 50, rowY + 45)
+      .text("• Follow preparation instructions above", 50, rowY + 60);
 
     doc.end();
   });
 }
 
 /* ==============================
-   WEBHOOK
+   WEBHOOK (STYLED EMAIL)
 ============================== */
 app.post("/webhook",
   bodyParser.raw({ type: "application/json" }),
@@ -180,12 +151,88 @@ app.post("/webhook",
       return res.sendStatus(400);
     }
 
+    if (event.type === "checkout.session.completed") {
+
+      const s = event.data.object;
+
+      const { name, dob, gender, email } = s.metadata;
+
+      const lineItems = await stripe.checkout.sessions.listLineItems(s.id);
+
+      const tests = lineItems.data.map(item => ({
+        name: item.description,
+        price: item.amount_total / 100,
+        code: item.description.match(/\((\d+)\)/)?.[1] || ""
+      }));
+
+      const pdf = await generatePDF(name, dob, gender, tests);
+
+      /* ===============================
+         PATIENT EMAIL (STYLED)
+      =============================== */
+      await transporter.sendMail({
+        from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
+        to: email,
+        subject: "Your Lab Order – ProSpine Orlando",
+        html: `
+        <div style="font-family: Arial; max-width:600px; margin:auto;">
+          <div style="text-align:center; padding:20px;">
+            <img src="https://www.prospineorlando.com/exams/logo.png" width="180"/>
+          </div>
+
+          <h2 style="color:#2c7be5;">Your Order is Confirmed</h2>
+
+          <p>Thank you for your order. Your lab request has been successfully processed.</p>
+
+          <div style="background:#f4f8fb; padding:15px; border-radius:8px;">
+            <strong>Important:</strong><br/>
+            • Bring a valid photo ID<br/>
+            • No payment required at Quest<br/>
+            • Follow test preparation instructions
+          </div>
+
+          <div style="text-align:center; margin:30px;">
+            <a href="https://appointment.questdiagnostics.com/as-home"
+              style="background:#2c7be5; color:white; padding:12px 25px; text-decoration:none; border-radius:6px;">
+              Schedule Your Appointment
+            </a>
+          </div>
+
+          <p style="font-size:12px; color:#666;">
+            Your lab order is attached as a PDF.
+          </p>
+        </div>
+        `,
+        attachments: [{
+          filename: "Lab_Order.pdf",
+          content: pdf
+        }]
+      });
+
+      /* ===============================
+         CLINIC EMAIL
+      =============================== */
+      await transporter.sendMail({
+        from: `"ProSpine Orlando" <${process.env.SMTP_USER}>`,
+        to: process.env.SMTP_USER,
+        subject: "New Lab Order",
+        html: `
+          <strong>New Order Received</strong><br/>
+          Name: ${name}<br/>
+          Email: ${email}<br/>
+          Tests: ${tests.map(t => t.name).join(", ")}
+        `
+      });
+
+      console.log("✅ Emails sent");
+    }
+
     res.sendStatus(200);
   }
 );
 
 /* ==============================
-   CORS FIX (WORKING)
+   CORS (UNCHANGED)
 ============================== */
 app.use(cors({
   origin: "https://www.prospineorlando.com",
@@ -198,14 +245,12 @@ app.options("*", cors());
 app.use(express.json());
 
 /* ==============================
-   CHECKOUT
+   CHECKOUT (UNCHANGED)
 ============================== */
 app.post("/create-checkout-session", async (req, res) => {
   try {
 
     const { name, dob, email, phone, gender, tests } = req.body;
-
-    console.log("INCOMING:", tests);
 
     const clean = tests
       .filter(t => t && t.name && t.price !== undefined)
