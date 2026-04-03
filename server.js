@@ -53,7 +53,7 @@ function generatePDF(name, dob, gender, tests) {
     }
 
     doc.y = y;
-
+doc.moveDown(3);
     doc.fontSize(14).fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", { align: "center" });
 
