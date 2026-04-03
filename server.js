@@ -13,7 +13,7 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const LOGO_PATH = path.join(__dirname, "logo.png");
 
 /* ===============================
-   EMAIL TRANSPORT (FIXED POSITION)
+   EMAIL TRANSPORT
 ============================== */
 const transporter = nodemailer.createTransport({
   host: "mail.smtp2go.com",
@@ -36,17 +36,7 @@ const TEST_INSTRUCTIONS = {
 };
 
 /* ==============================
-   DRAW BOX
-============================== */
-function drawBox(doc, y, height) {
-  doc.roundedRect(50, y, 500, height, 8)
-    .strokeColor("#e0e0e0")
-    .lineWidth(1)
-    .stroke();
-}
-
-/* ==============================
-   PDF GENERATOR (FINAL — NO OVERLAP EVER)
+   PDF GENERATOR
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
@@ -59,7 +49,6 @@ function generatePDF(name, dob, gender, tests) {
 
     let currentY = 25;
 
-    /* ===== LOGO (SMALL + CENTERED) ===== */
     if (fs.existsSync(LOGO_PATH)) {
       const image = doc.openImage(LOGO_PATH);
       const maxWidth = 130;
@@ -67,32 +56,24 @@ function generatePDF(name, dob, gender, tests) {
 
       const displayWidth = maxWidth;
       const displayHeight = image.height * scale;
-
       const centerX = (doc.page.width - displayWidth) / 2;
 
       doc.image(LOGO_PATH, centerX, currentY, { width: displayWidth });
-
       currentY += displayHeight + 8;
     }
 
     doc.y = currentY;
 
-    /* ===== TITLE ===== */
     doc.fontSize(14)
       .fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", { align: "center" });
 
     doc.moveDown(2);
 
-    /* ===============================
-       TWO COLUMN SECTION
-    =============================== */
-
     const startY = doc.y;
     const leftX = 50;
     const rightX = 300;
 
-    // LEFT COLUMN (PATIENT)
     doc.fontSize(11).fillColor("black")
       .text("Patient Information", leftX, startY);
 
@@ -101,7 +82,6 @@ function generatePDF(name, dob, gender, tests) {
       .text(`DOB: ${dob}`, leftX, startY + 30)
       .text(`Gender: ${gender}`, leftX, startY + 45);
 
-    // RIGHT COLUMN (PROVIDER)
     doc.fontSize(11)
       .text("Ordering Provider", rightX, startY);
 
@@ -111,83 +91,40 @@ function generatePDF(name, dob, gender, tests) {
       .text("ProSpine Orlando Chiropractic", rightX, startY + 45)
       .text("Quest Account: 11845569", rightX, startY + 60);
 
-    /* ===== BOX AROUND BOTH ===== */
     const boxHeight = 80;
-    doc.roundedRect(45, startY - 5, 500, boxHeight, 6)
-      .strokeColor("#e0e0e0")
-      .lineWidth(1)
-      .stroke();
+    doc.roundedRect(45, startY - 5, 500, boxHeight, 6).stroke("#e0e0e0");
 
     doc.y = startY + boxHeight + 10;
 
-    /* ===============================
-       TABLE: ORDERED TESTS
-    =============================== */
-doc.moveDown(3)   /* CSB  */
-    const tableStartY = doc.y;
+    doc.moveDown(3);
 
-    // HEADER
-    doc.fontSize(11)
-      .text("Ordered Tests", 50, tableStartY);
+    doc.fontSize(11).text("Ordered Tests", 50);
 
-    const tableTop = tableStartY + 15;
-
-    // Table Header Row
-    doc.fontSize(10).fillColor("black");
-    doc.text("Test Name", 50, tableTop);
-    doc.text("Code", 350, tableTop);
-    doc.text("Instructions", 420, tableTop);
-
-    // Divider line
-    doc.moveTo(50, tableTop + 12)
-      .lineTo(550, tableTop + 12)
-      .strokeColor("#cccccc")
-      .stroke();
-
-    let rowY = tableTop + 18;
+    let rowY = doc.y + 10;
 
     tests.forEach((t, i) => {
-
-      // Alternate row shading
-      if (i % 2 === 0) {
-        doc.rect(50, rowY - 2, 500, 16)
-          .fill("#f9f9f9")
-          .fillColor("black");
-      }
-
       doc.fontSize(10)
-        .text(t.name, 50, rowY, { width: 290 })
-        .text(t.code, 350, rowY)
-        .text(TEST_INSTRUCTIONS[t.code] || "-", 420, rowY, { width: 120 });
+        .text(t.name, 50, rowY)
+        .text(t.code || "-", 350, rowY)
+        .text(TEST_INSTRUCTIONS[t.code] || "-", 420, rowY);
 
       rowY += 16;
     });
 
     doc.y = rowY + 10;
 
-    /* ===============================
-       INSTRUCTIONS BOX
-    =============================== */
-doc.moveDown(3)   /* CSB  */
-    const instY = doc.y;
+    doc.moveDown(2);
 
-    doc.fontSize(11)
-      .text("Instructions", 50, instY);
+    doc.fontSize(11).text("Instructions", 50);
 
     doc.fontSize(10)
-      .text("• Bring a valid photo ID", 50, instY + 15)
-      .text("• No payment required at the lab", 50, instY + 28)
-      .text("• Follow test-specific preparation above", 50, instY + 41);
-
-    doc.roundedRect(45, instY - 5, 500, 65, 6)
-      .strokeColor("#e0e0e0")
-      .lineWidth(1)
-      .stroke();
+      .text("• Bring a valid photo ID", 50)
+      .text("• No payment required at the lab", 50)
+      .text("• Follow test-specific preparation above", 50);
 
     doc.end();
   });
 }
-     
 
 /* ==============================
    WEBHOOK
@@ -217,108 +154,46 @@ app.post("/webhook",
       const dob = s.metadata.dob;
       const gender = s.metadata.gender;
       const email = s.metadata.email;
-      const tests = JSON.parse(s.metadata.tests || "[]");
-      const total = tests.reduce((sum, t) => sum + Number(t.price || 0), 0);
-       
+
+      /* 🔥 GET REAL TESTS FROM STRIPE */
+      const lineItems = await stripe.checkout.sessions.listLineItems(s.id);
+
+      const tests = lineItems.data.map(item => ({
+        name: item.description,
+        price: item.amount_total / 100,
+        code: "" // optional
+      }));
+
+      const total = tests.reduce((sum, t) => sum + t.price, 0);
+
       const pdf = await generatePDF(name, dob, gender, tests);
 
-      const patientHTML = `
-<div style="font-family:Arial; max-width:600px; margin:auto; line-height:1.5;">
-  
-  <div style="text-align:center;">
-    <img src="https://www.prospineorlando.com/images/logo-5-stars.png" style="width:220px;">
-  </div>
+      /* PATIENT EMAIL */
+      await transporter.sendMail({
+        from: '"ProSpine Orlando" <contact@prospineorlando.com>',
+        to: email,
+        subject: "Your Lab Order",
+        html: `<h2>Lab Order Confirmation</h2><p>${name}</p>`,
+        attachments: [{
+          filename: "Lab_Order.pdf",
+          content: pdf
+        }]
+      });
 
-  <h2 style="text-align:center;">Lab Order Confirmation</h2>
-
-  <p>
-    <strong>${name}</strong><br>
-    DOB: ${dob}<br>
-    Gender: ${gender}
-  </p>
-
-  <h3>Ordered Tests</h3>
-
-  <ul>
-  ${tests.map(t=>`
-    <li>
-      ${t.name} (${t.code})
-      ${TEST_INSTRUCTIONS[t.code] ? `<br><span style="color:#2c7be5;">* ${TEST_INSTRUCTIONS[t.code]}</span>` : ""}
-    </li>
-  `).join("")}
-  </ul>
-  
-  <div style="text-align:center; margin-top:25px;">
-    <a href="https://appointment.questdiagnostics.com/as-home" style="text-decoration:none;">
-      <img src="https://www.prospineorlando.com/exams/quest.png" style="width:140px;"><br><br>
-      <span style="background:#2c7be5;color:white;padding:12px 18px;border-radius:6px;">
-        Schedule Your Appointment
-      </span>
-    </a>
-  </div>
-
-<h3>Instructions</h3>
-
-  <ul>
-    <li>Bring a valid photo ID</li>
-    <li>No payment required at the lab</li>
-    <li>Follow test-specific preparation instructions above</li>
-  </ul>
-
-  <div style="font-size:12px; color:#555; margin-top:20px; padding-top:10px; border-top:1px solid #ddd;">
-    <strong>Important:</strong><br>
-    ProSpine Orlando facilitates laboratory testing services for your convenience. 
-    All laboratory testing is performed by a third-party CLIA-certified laboratory (Quest Diagnostics). 
-    ProSpine Orlando is not a laboratory and does not perform or analyze lab tests. 
-    Payment collected is for coordination and administrative services.
-  </div>
-
-   
-</div>`;
-      /* =========================
-   EMAIL TO PATIENT
-========================= */
-await transporter.sendMail({
-  from: '"ProSpine Orlando" <contact@prospineorlando.com>',
-  to: email,
-  subject: "Your Lab Order",
-  html: patientHTML,
-  attachments: [{
-    filename: "Lab_Order.pdf",
-    content: pdf
-  }]
-});
-
-
-/* =========================
-   EMAIL TO CLINIC
-========================= */
-await transporter.sendMail({
-  from: '"Lab Orders" <contact@prospineorlando.com>',
-  to: "contact@prospineorlando.com",
-  subject: `NEW LAB ORDER - ${name}`,
-  html: `
-  <div style="font-family:Arial;">
-    <h2>New Lab Order Submitted</h2>
-
-    <p><strong>Name:</strong> ${name}</p>
-    <p><strong>DOB:</strong> ${dob}</p>
-    <p><strong>Gender:</strong> ${gender}</p>
-    <p><strong>Email:</strong> ${email}</p>
-<p><strong>Total Paid:</strong> $${total.toFixed(2)}</p>
-    <h3>Tests Ordered:</h3>
-    <ul>
-      ${tests.map(t => `
-        <li>${t.name} (${t.code}) - $${t.price}</li>
-      `).join("")}
-    </ul>
-  </div>
-  `,
-  attachments: [{
-    filename: "Lab_Order.pdf",
-    content: pdf
-  }]
-});
+      /* CLINIC EMAIL */
+      await transporter.sendMail({
+        from: '"Lab Orders" <contact@prospineorlando.com>',
+        to: "contact@prospineorlando.com",
+        subject: `NEW LAB ORDER - ${name}`,
+        html: `
+          <p><strong>Total Paid:</strong> $${total.toFixed(2)}</p>
+          <ul>${tests.map(t => `<li>${t.name}</li>`).join("")}</ul>
+        `,
+        attachments: [{
+          filename: "Lab_Order.pdf",
+          content: pdf
+        }]
+      });
     }
 
     res.sendStatus(200);
@@ -340,7 +215,6 @@ app.post("/create-checkout-session", async (req, res) => {
 
   const clean = tests.map(t => ({
     name: t.name,
-    code: t.code,
     price: t.price
   }));
 
@@ -360,9 +234,13 @@ app.post("/create-checkout-session", async (req, res) => {
     success_url: "https://www.prospineorlando.com/success/index.html",
     cancel_url: "https://www.prospineorlando.com/cancel/index.html",
 
+    /* 🔥 CLEAN METADATA (NO MORE ERRORS) */
     metadata: {
-      name, dob, gender, email, phone,
-      tests: JSON.stringify(clean)
+      name,
+      dob,
+      gender,
+      email,
+      phone
     }
   });
 
