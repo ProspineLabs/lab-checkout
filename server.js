@@ -2,7 +2,7 @@ const express = require("express");
 const Stripe = require("stripe");
 const nodemailer = require("nodemailer");
 const bodyParser = require("body-parser");
-const cors = require("cors");
+const cors = require("cors"); // ✅ KEEP ONLY THIS ONE
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
@@ -123,7 +123,6 @@ function generatePDF(name, dob, gender, tests) {
     let rowY = tableTop + 18;
 
     tests.forEach((t, i) => {
-
       if (i % 2 === 0) {
         doc.rect(50, rowY - 2, 500, 16)
           .fill("#f9f9f9")
@@ -162,7 +161,7 @@ function generatePDF(name, dob, gender, tests) {
 }
 
 /* ==============================
-   WEBHOOK (UNCHANGED)
+   WEBHOOK
 ============================== */
 app.post("/webhook",
   bodyParser.raw({ type: "application/json" }),
@@ -181,37 +180,13 @@ app.post("/webhook",
       return res.sendStatus(400);
     }
 
-    if (event.type === "checkout.session.completed") {
-
-      const s = event.data.object;
-
-      const name = s.metadata.name;
-      const dob = s.metadata.dob;
-      const gender = s.metadata.gender;
-      const email = s.metadata.email;
-
-      const lineItems = await stripe.checkout.sessions.listLineItems(s.id);
-
-      const tests = lineItems.data.map(item => ({
-        name: item.description,
-        price: item.amount_total / 100,
-        code: item.description.match(/\((\d+)\)/)?.[1] || ""
-      }));
-
-      const pdf = await generatePDF(name, dob, gender, tests);
-
-      /* KEEP YOUR EMAIL LOGIC HERE */
-    }
-
     res.sendStatus(200);
   }
 );
 
 /* ==============================
-   CHECKOUT (FULLY FIXED)
+   CORS FIX (WORKING)
 ============================== */
-const cors = require("cors");
-
 app.use(cors({
   origin: "https://www.prospineorlando.com",
   methods: ["GET", "POST"],
@@ -222,6 +197,9 @@ app.options("*", cors());
 
 app.use(express.json());
 
+/* ==============================
+   CHECKOUT
+============================== */
 app.post("/create-checkout-session", async (req, res) => {
   try {
 
@@ -237,8 +215,6 @@ app.post("/create-checkout-session", async (req, res) => {
         code: t.code || ""
       }))
       .filter(t => !isNaN(t.price) && t.price > 0);
-
-    console.log("CLEAN:", clean);
 
     if (clean.length === 0) {
       return res.status(400).json({ error: "Invalid test data" });
