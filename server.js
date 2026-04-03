@@ -17,11 +17,9 @@ const LOGO_PATH = path.join(__dirname, "logo.png");
 ============================== */
 function safeName(name, code) {
   let full = code ? `${name} (${code})` : name;
-
   if (full.length > 100) {
     full = full.substring(0, 97) + "...";
   }
-
   return full;
 }
 
@@ -49,7 +47,7 @@ const TEST_INSTRUCTIONS = {
 };
 
 /* ==============================
-   PDF GENERATOR
+   PDF GENERATOR (RESTORED CLEAN)
 ============================== */
 function generatePDF(name, dob, gender, tests) {
   return new Promise((resolve) => {
@@ -64,19 +62,19 @@ function generatePDF(name, dob, gender, tests) {
 
     if (fs.existsSync(LOGO_PATH)) {
       const image = doc.openImage(LOGO_PATH);
-      const maxWidth = 140;
+      const maxWidth = 130;
       const scale = maxWidth / image.width;
 
       const displayHeight = image.height * scale;
       const centerX = (doc.page.width - maxWidth) / 2;
 
       doc.image(LOGO_PATH, centerX, currentY, { width: maxWidth });
-      currentY += displayHeight + 20;
+      currentY += displayHeight + 12;
     }
 
     doc.y = currentY;
 
-    doc.fontSize(16)
+    doc.fontSize(14)
       .fillColor("#2c7be5")
       .text("LAB ORDER SUMMARY", { align: "center" });
 
@@ -84,49 +82,68 @@ function generatePDF(name, dob, gender, tests) {
 
     const startY = doc.y;
 
-    doc.roundedRect(45, startY - 5, 500, 80, 6)
-      .strokeColor("#dfe3e8")
-      .stroke();
+    const leftX = 50;
+    const rightX = 300;
 
-    doc.fontSize(11).text("Patient Information", 50, startY);
+    doc.fontSize(11).fillColor("black")
+      .text("Patient Information", leftX, startY);
 
     doc.fontSize(10)
-      .text(`Name: ${name}`, 50, startY + 15)
-      .text(`DOB: ${dob}`, 50, startY + 30)
-      .text(`Gender: ${gender}`, 50, startY + 45);
+      .text(`Name: ${name}`, leftX, startY + 15)
+      .text(`DOB: ${dob}`, leftX, startY + 30)
+      .text(`Gender: ${gender}`, leftX, startY + 45);
 
-    doc.text("Ordering Provider", 300, startY)
-      .text("Dr. Cleberton S. Bastos, DC", 300, startY + 15)
-      .text("ProSpine Orlando Chiropractic", 300, startY + 30)
-      .text("Quest Account: 11845569", 300, startY + 45);
+    doc.text("Ordering Provider", rightX, startY)
+      .text("Dr. Cleberton S. Bastos, DC", rightX, startY + 15)
+      .text("ProSpine Orlando Chiropractic", rightX, startY + 30)
+      .text("Quest Account: 11845569", rightX, startY + 45);
+
+    doc.roundedRect(45, startY - 5, 500, 80, 6)
+      .strokeColor("#e0e0e0")
+      .stroke();
 
     doc.y = startY + 100;
 
-    doc.fontSize(12).text("Ordered Tests", 50);
+    doc.fontSize(11).text("Ordered Tests", 50);
 
     let rowY = doc.y + 10;
 
     tests.forEach((t, i) => {
-      const isEven = i % 2 === 0;
 
-      doc.rect(50, rowY - 2, 500, 20)
-        .fill(isEven ? "#f4f8fb" : "#ffffff")
-        .fillColor("black");
+      if (i % 2 === 0) {
+        doc.rect(50, rowY - 2, 500, 18)
+          .fill("#f9f9f9")
+          .fillColor("black");
+      }
 
       doc.fontSize(10)
-        .text(t.name, 55, rowY)
+        .text(t.name, 50, rowY, { width: 280 })
         .text(t.code || "-", 350, rowY)
         .text(TEST_INSTRUCTIONS[t.code] || "-", 420, rowY, { width: 120 });
 
-      rowY += 20;
+      rowY += 18;
     });
+
+    doc.y = rowY + 10;
+
+    doc.roundedRect(45, doc.y, 500, 60, 6)
+      .strokeColor("#e0e0e0")
+      .stroke();
+
+    doc.fontSize(11)
+      .text("Instructions", 50, doc.y + 10);
+
+    doc.fontSize(10)
+      .text("• Bring a valid photo ID", 50, doc.y + 25)
+      .text("• No payment required at the lab", 50, doc.y + 38)
+      .text("• Follow preparation instructions above", 50, doc.y + 51);
 
     doc.end();
   });
 }
 
 /* ==============================
-   WEBHOOK (EMAILS)
+   WEBHOOK (EMAIL + TOTAL)
 ============================== */
 app.post("/webhook",
   bodyParser.raw({ type: "application/json" }),
@@ -178,8 +195,10 @@ app.post("/webhook",
         subject: "Your Lab Order Confirmation",
         html: `
         <div style="font-family:Arial;max-width:600px;margin:auto;">
+
           <div style="text-align:center;padding:20px;">
-            <img src="https://www.prospineorlando.com/exams/logo.png" width="200"/>
+            <img src="https://www.prospineorlando.com/exams/logo.png"
+                 style="display:block;margin:auto;" width="180"/>
           </div>
 
           <h2 style="color:#2c7be5;text-align:center;">Lab Order Confirmed</h2>
@@ -208,6 +227,12 @@ app.post("/webhook",
               Schedule Appointment
             </a>
           </div>
+
+          <div style="text-align:center;">
+            <img src="https://www.prospineorlando.com/exams/quest.png"
+                 style="display:block;margin:auto;" width="120"/>
+          </div>
+
         </div>
         `,
         attachments: [{ filename: "Lab_Order.pdf", content: pdf }]
