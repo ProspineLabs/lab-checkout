@@ -290,42 +290,45 @@ if (!data.phone && !data.email) {
   return res.status(400).send("Missing contact info");
 }
     
-    const message = `
-New Patient Contact Request
-
+    const message = 
+`New Patient Contact Request
 ----------------------------------------
 Visit Type: ${data.type}
 Priority: ${data.priority || "Normal"}
-----------------------------------------
-
-${data.type === "Car Accident" ? `
+----------------------------------------`
++
+(data.type === "Car Accident" ? 
+`
 Accident Details:
 • Date of Accident: ${data.date}
-• Role: ${data.driver}
-` : ""}
-
-${data.type === "Sports Injury" ? `
+• Role: ${data.driver}` : ""
+)
++
+(data.type === "Sports Injury" ? 
+`
 Injury Details:
 • Sport: ${data.sport}
-• Area: ${data.injury}
-` : ""}
-
-${data.type === "Wellness" ? `
+• Area: ${data.injury}` : ""
+)
++
+(data.type === "Wellness" ? 
+`
 Visit Details:
 • Goal: ${data.goal}
-• Visit Type: ${data.visit}
-` : ""}
-
+• Visit Type: ${data.visit}` : ""
+)
++
+`
 Contact Information:
 • Phone: ${data.phone}
 • Email: ${data.email || "Not provided"}
 
 ----------------------------------------
 Action Recommended:
-${data.type === "Car Accident" ? "Immediate follow-up is advised due to potential PIP time sensitivity." : "Routine follow-up recommended."}
-----------------------------------------
-`;
-
+${data.type === "Car Accident" 
+  ? "Immediate follow-up is advised due to potential PIP time sensitivity." 
+  : "Routine follow-up recommended."}
+----------------------------------------`;
     await transporter.sendMail({
       from: "contact@prospineorlando.com",
       to: "contact@prospineorlando.com",
