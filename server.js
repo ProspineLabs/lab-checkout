@@ -6,6 +6,7 @@ const cors = require("cors");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
+onst rateLimit = require("express-rate-limit");
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
@@ -242,6 +243,12 @@ app.post("/webhook",
 app.use(cors({ origin: "https://www.prospineorlando.com" }));
 app.use(express.json());
 
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20
+});
+
+app.use("/contact", limiter);
 /* CHECKOUT */
 app.post("/create-checkout-session", async (req, res) => {
 
@@ -273,6 +280,16 @@ app.post("/contact", async (req, res) => {
   try {
     const data = req.body;
 
+// 🚫 Honeypot spam protection
+if (data.company) {
+  return res.status(400).send("Spam detected");
+}
+
+// 🚫 Basic validation
+if (!data.phone && !data.email) {
+  return res.status(400).send("Missing contact info");
+}
+    
     const message = `
 New Patient Contact Request
 
