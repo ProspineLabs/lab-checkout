@@ -267,3 +267,33 @@ app.post("/create-checkout-session", async (req, res) => {
 });
 
 app.listen(3000);
+
+/*NEW EMAIL FOR WHEN PATIENT CONTACTS CLINIC TRHU WEBSITE */
+app.post("/contact", async (req, res) => {
+  try {
+    const data = req.body;
+
+    const message = `
+NEW PATIENT REQUEST
+
+Type: ${data.type}
+Priority: ${data.priority || "Normal"}
+
+Details:
+${JSON.stringify(data, null, 2)}
+    `;
+
+    await transporter.sendMail({
+      from: "contact@prospineorlando.com",
+      to: "contact@prospineorlando.com",
+      subject: "New Contact Request",
+      text: message
+    });
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error");
+  }
+});
