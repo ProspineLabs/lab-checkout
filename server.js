@@ -274,19 +274,45 @@ app.post("/contact", async (req, res) => {
     const data = req.body;
 
     const message = `
-NEW PATIENT REQUEST
+New Patient Contact Request
 
-Type: ${data.type}
+----------------------------------------
+Visit Type: ${data.type}
 Priority: ${data.priority || "Normal"}
+----------------------------------------
 
-Details:
-${JSON.stringify(data, null, 2)}
-    `;
+${data.type === "Car Accident" ? `
+Accident Details:
+• Date of Accident: ${data.date}
+• Role: ${data.driver}
+` : ""}
+
+${data.type === "Sports Injury" ? `
+Injury Details:
+• Sport: ${data.sport}
+• Area: ${data.injury}
+` : ""}
+
+${data.type === "Wellness" ? `
+Visit Details:
+• Goal: ${data.goal}
+• Visit Type: ${data.visit}
+` : ""}
+
+Contact Information:
+• Phone: ${data.phone}
+• Email: ${data.email || "Not provided"}
+
+----------------------------------------
+Action Recommended:
+${data.type === "Car Accident" ? "Immediate follow-up is advised due to potential PIP time sensitivity." : "Routine follow-up recommended."}
+----------------------------------------
+`;
 
     await transporter.sendMail({
       from: "contact@prospineorlando.com",
       to: "contact@prospineorlando.com",
-      subject: "New Contact Request",
+     subject: `New Patient Contact Request – ${data.type}${data.type === "Car Accident" ? " [URGENT]" : ""}`,
       text: message
     });
 
