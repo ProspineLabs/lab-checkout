@@ -268,7 +268,7 @@ app.post("/create-checkout-session", async (req, res) => {
 
 app.listen(3000);
 
-/*NEW EMAIL FOR WHEN PATIENT CONTACTS CLINIC TRHU WEBSITE */
+          /*NEW EMAIL FOR WHEN PATIENT CONTACTS CLINIC TRHU WEBSITE */
 app.post("/contact", async (req, res) => {
   try {
     const data = req.body;
