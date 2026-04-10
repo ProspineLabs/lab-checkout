@@ -6,7 +6,7 @@ const cors = require("cors");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
-onst rateLimit = require("express-rate-limit");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
