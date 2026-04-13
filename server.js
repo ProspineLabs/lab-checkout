@@ -142,6 +142,15 @@ doc.moveDown(4);
   });
 }
 
+function getInstructions(tests){
+  return tests
+    .map(t => {
+      const instr = TEST_INSTRUCTIONS[t.code];
+      return instr ? `• <strong>${t.name}</strong>: ${instr}` : null;
+    })
+    .filter(Boolean)
+    .join("<br>");
+}
 /* ==============================
    WEBHOOK
 ============================== */
@@ -164,7 +173,7 @@ app.post("/webhook",
     if (event.type === "checkout.session.completed") {
 
       const s = event.data.object;
-      const { name, dob, gender, email } = s.metadata;
+      const { name, dob, gender, email, phone } = s.metadata;
 
       const items = await stripe.checkout.sessions.listLineItems(s.id);
 
@@ -194,7 +203,12 @@ app.post("/webhook",
           <ul>
             ${tests.map(t => `<li>${t.name}</li>`).join("")}
           </ul>
-
+${getInstructions(tests) ? `
+<div style="background:#fff3cd;padding:10px;border-radius:6px;margin-top:15px;">
+  <strong style="color:red;">⚠️ IMPORTANT PREPARATION:</strong>
+  ${getInstructions(tests)}
+</div>
+` : ""}
           <div style="text-align:center;">
             <img src="https://www.prospineorlando.com/exams/quest.png" width="120"/>
           </div>
@@ -222,12 +236,24 @@ app.post("/webhook",
         html: `
         <div style="font-family:Arial;">
           <h3>New Lab Order</h3>
-          <strong>${name}</strong><br/>
-          ${email}<br/><br/>
 
-          <ul>
-            ${tests.map(t => `<li>${t.name} — $${t.price.toFixed(2)}</li>`).join("")}
-          </ul>
+<strong>Patient Information</strong><br/>
+Name: ${name}<br/>
+DOB: ${dob}<br/>
+Gender: ${gender}<br/>
+Phone: ${phone || "Not provided"}<br/>
+Email: ${email}<br/><br/>
+
+         <ul style="line-height:1.6;">
+  ${tests.map(t => `<li>${t.name} — $${t.price.toFixed(2)}</li>`).join("")}
+</ul>
+
+${getInstructions(tests) ? `
+<div style="background:#fff3cd;padding:10px;border-radius:6px;margin-top:15px;">
+  <strong>Preparation Instructions:</strong><br>
+  ${getInstructions(tests)}
+</div>
+` : ""}
 
           <h3>Total: $${total.toFixed(2)}</h3>
         </div>
