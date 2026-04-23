@@ -31,9 +31,7 @@ const transporter = nodemailer.createTransport({
 });
 
 /* TEST INSTRUCTIONS */
-const TEST_INSTRUCTIONS = {
-  "7600": "Fasting 9–12 hours required"
-};
+
 
 /* ==============================
    PDF (FULLY FIXED)
@@ -105,7 +103,7 @@ doc.moveDown(4);
 
       doc.text(t.name, col1, rowY, { width: 260 });
       doc.text(t.code || "-", col2, rowY);
-      doc.text(TEST_INSTRUCTIONS[t.code] || "-", col3, rowY, { width: 120 });
+      doc.text(t.instructions || "-", col3, rowY, { width: 120 });
 
       rowY += height;
     });
@@ -145,7 +143,7 @@ doc.moveDown(4);
 function getInstructions(tests){
   return tests
     .map(t => {
-      const instr = TEST_INSTRUCTIONS[t.code];
+      const instr = t.instructions;
       return instr ? `• <strong>${t.name}</strong>: ${instr}` : null;
     })
     .filter(Boolean)
@@ -154,6 +152,7 @@ function getInstructions(tests){
 /* ==============================
    WEBHOOK
 ============================== */
+
 app.post("/webhook",
   bodyParser.raw({ type: "application/json" }),
   async (req, res) => {
@@ -177,11 +176,20 @@ app.post("/webhook",
 
       const items = await stripe.checkout.sessions.listLineItems(s.id);
 
-      const tests = items.data.map(i => ({
-        name: i.description,
-        price: i.amount_total / 100,
-        code: i.description.match(/\((\d+)\)/)?.[1] || ""
-      }));
+      // 🔥 GET INSTRUCTIONS FROM SESSION METADATA
+const instructionsMap = JSON.parse(s.metadata.instructions || "[]");
+
+const tests = items.data.map(i => {
+  const code = i.description.match(/\((\d+)\)/)?.[1] || "";
+  const found = instructionsMap.find(x => x.code === code);
+
+  return {
+    name: i.description,
+    price: i.amount_total / 100,
+    code,
+    instructions: found?.instructions || ""
+  };
+});
 
       const total = items.data.reduce((sum, i) => sum + i.amount_total, 0) / 100;
 
@@ -293,7 +301,14 @@ app.post("/create-checkout-session", async (req, res) => {
     })),
     success_url: "https://www.prospineorlando.com/success/index.html",
     cancel_url: "https://www.prospineorlando.com/cancel/index.html",
-    metadata: { name, dob, gender, email, phone }
+    metadata: {
+  name,
+  dob,
+  gender,
+  email,
+  phone,
+  instructions: JSON.stringify(req.body.instructions || [])
+}
   });
 
   res.json({ url: session.url });
